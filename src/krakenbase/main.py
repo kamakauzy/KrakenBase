@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import logging
 import signal
-import sys
 from pathlib import Path
 
 import uvicorn
@@ -14,6 +13,7 @@ import uvicorn
 from krakenbase.alerts.meshtastic_alert import MeshtasticAlerter
 from krakenbase.api.app import create_app
 from krakenbase.client.kraken import KrakenClient
+from krakenbase.client.synthetic import SyntheticKrakenClient
 from krakenbase.config import load_config
 from krakenbase.core.baseline import BaselineEngine
 from krakenbase.core.state_machine import StateMachine
@@ -22,21 +22,37 @@ from krakenbase.store.events import EventStore
 logger = logging.getLogger("krakenbase")
 
 
-async def amain(config_path: str | None) -> None:
+async def amain(config_path: str | None, synthetic: bool = False) -> None:
     settings = load_config(config_path)
     logging.basicConfig(
         level=getattr(logging, settings.system.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
     )
-    logger.info("KrakenBase starting  site=%s", settings.system.site_id)
 
-    # Ensure data dir exists
+    use_synth = synthetic or settings.baseline.power_source == "synthetic"
+    logger.info(
+        "KrakenBase starting  site=%s  mode=%s",
+        settings.system.site_id,
+        "SYNTHETIC" if use_synth else "LIVE",
+    )
+
     Path(settings.system.data_dir).mkdir(parents=True, exist_ok=True)
 
     store = EventStore(settings.system.audit_db)
     await store.open()
 
-    kraken = KrakenClient(settings.kraken)
+    if use_synth:
+        kraken = SyntheticKrakenClient(
+            anomaly_freq_hz=462_712_500,
+            anomaly_bearing_deg=142.0,
+            anomaly_rssi_db=-35.0,
+            anomaly_interval_s=20.0,
+            anomaly_duration_s=10.0,
+        )
+        settings.alert.meshtastic.enabled = False
+    else:
+        kraken = KrakenClient(settings.kraken)
+
     baseline = BaselineEngine(settings.baseline)
     alerter = MeshtasticAlerter(settings.alert.meshtastic)
 
@@ -58,7 +74,6 @@ async def amain(config_path: str | None) -> None:
         roe_version=settings.roe.version,
     )
 
-    # Run state machine and API concurrently
     config = uvicorn.Config(
         app,
         host=settings.status_api.host,
@@ -98,17 +113,29 @@ def main() -> None:
         default=None,
         help="Path to config.yaml (default: look for ./config.yaml)",
     )
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Force synthetic Kraken (no hardware). Also enabled when baseline.power_source=synthetic",
+    )
     args = parser.parse_args()
 
     config_path = args.config
     if config_path is None:
-        for candidate in ("config.yaml", "config/config.yaml", "config/config.example.yaml"):
+        candidates = [
+            "config.yaml",
+            "config/config.yaml",
+        ]
+        if args.synthetic:
+            candidates.append("config/config.synthetic.yaml")
+        candidates.append("config/config.example.yaml")
+        for candidate in candidates:
             if Path(candidate).exists():
                 config_path = candidate
                 break
 
     try:
-        asyncio.run(amain(config_path))
+        asyncio.run(amain(config_path, synthetic=args.synthetic))
     except KeyboardInterrupt:
         pass
 

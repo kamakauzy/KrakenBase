@@ -1,129 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KrakenBase</title>
-  <style>
-    :root {
-      --bg: #0b0f14; --panel: #141b24; --border: #243041; --text: #d7e0ea;
-      --muted: #8b9bb0; --accent: #3dd6c6; --warn: #f0a500; --bad: #ff5c5c; --good: #5cff9a;
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--text); font-size: 13px; }
-    header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); background: #0e141c; }
-    header h1 { margin: 0; font-size: 16px; letter-spacing: 0.04em; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); margin-left: 8px; }
-    .ok { color: var(--good); } .degraded { color: var(--warn); } .fault { color: var(--bad); }
-    main { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; padding: 12px; }
-    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
-    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-    .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
-    canvas { width: 100%; height: 220px; background: #0a1018; border-radius: 4px; border: 1px solid var(--border); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 500; }
-    .muted { color: var(--muted); }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .stat { min-width: 120px; }
-    .stat .v { font-size: 18px; color: var(--accent); }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>KrakenBase</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#0b0f14;--panel:#141b24;--border:#243041;--text:#d7e0ea;--muted:#8b9bb0;--accent:#3dd6c6;--warn:#f0a500;--bad:#ff5c5c;--good:#5cff9a}
+*{box-sizing:border-box}body{margin:0;font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--text);font-size:13px}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:#0e141c}
+h1{margin:0;font-size:15px;letter-spacing:.05em}.pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);margin-left:8px}
+.ok{color:var(--good)}.degraded{color:var(--warn)}.fault{color:var(--bad)}
+main{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;padding:10px}@media(max-width:1000px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px}
+.card h2{margin:0 0 8px;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
+#map{height:420px;width:100%;border-radius:6px;border:1px solid var(--border);background:#0a1018}
+canvas{width:100%;height:160px;background:#0a1018;border-radius:4px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--border)}th{color:var(--muted);font-weight:500}
+.muted{color:var(--muted)}.row{display:flex;gap:12px;flex-wrap:wrap}.stat{min-width:100px}.stat .v{font-size:16px;color:var(--accent)}.span2{grid-column:1/-1}
+</style>
 </head>
 <body>
-  <header>
-    <h1>KRAKENBASE</h1>
-    <div>
-      <span id="clock" class="muted"></span>
-      <span id="status-pill" class="pill">…</span>
-      <span id="state-pill" class="pill">…</span>
-    </div>
-  </header>
-  <main>
-    <section class="card">
-      <h2>Spectrum baseline strip</h2>
-      <canvas id="wf" height="220"></canvas>
-      <p class="muted">Mean power per bin. Red markers = recent anomalies. Baseline engine view (not live FFT).</p>
-    </section>
-    <section class="card">
-      <h2>Status</h2>
-      <div class="row">
-        <div class="stat"><div class="muted">State</div><div class="v" id="state">—</div></div>
-        <div class="stat"><div class="muted">Kraken age</div><div class="v" id="age">—</div></div>
-        <div class="stat"><div class="muted">Bins</div><div class="v" id="bins">—</div></div>
-        <div class="stat"><div class="muted">Fleet online</div><div class="v" id="fleet-online">—</div></div>
-      </div>
-    </section>
-    <section class="card">
-      <h2>Recent events</h2>
-      <table><thead><tr><th>Time</th><th>Type</th><th>Detail</th></tr></thead><tbody id="events"></tbody></table>
-    </section>
-    <section class="card">
-      <h2>Fleet</h2>
-      <table><thead><tr><th>Node</th><th>Status</th><th>Freq</th><th>Seen</th></tr></thead><tbody id="fleet"></tbody></table>
-    </section>
-  </main>
-  <script>
-    const $ = (id) => document.getElementById(id);
-    function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString(); } catch { return iso || '—'; } }
-    function drawWaterfall(bins, marks) {
-      const canvas = $('wf'); const dpr = window.devicePixelRatio || 1;
-      const w = canvas.clientWidth, h = 220;
-      canvas.width = w * dpr; canvas.height = h * dpr;
-      const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
-      ctx.fillStyle = '#0a1018'; ctx.fillRect(0, 0, w, h);
-      if (!bins.length) { ctx.fillStyle = '#8b9bb0'; ctx.fillText('No baseline bins yet', 12, 24); return; }
-      const minF = Math.min(...bins.map(b => b.freq_hz)), maxF = Math.max(...bins.map(b => b.freq_hz));
-      const powers = bins.map(b => b.mean_db);
-      const minP = Math.min(...powers) - 5, maxP = Math.max(...powers) + 5;
-      const x = (f) => ((f - minF) / Math.max(1, maxF - minF)) * (w - 20) + 10;
-      const y = (p) => h - 20 - ((p - minP) / Math.max(1, maxP - minP)) * (h - 40);
-      ctx.strokeStyle = '#3dd6c6'; ctx.lineWidth = 1.5; ctx.beginPath();
-      bins.forEach((b, i) => { const xx = x(b.freq_hz), yy = y(b.mean_db); if (i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
-      ctx.stroke();
-      marks.forEach(m => {
-        if (m.freq_hz < minF || m.freq_hz > maxF) return;
-        const xx = x(m.freq_hz);
-        ctx.strokeStyle = '#ff5c5c'; ctx.beginPath(); ctx.moveTo(xx, 15); ctx.lineTo(xx, h-15); ctx.stroke();
-      });
-      ctx.fillStyle = '#8b9bb0';
-      ctx.fillText((minF/1e6).toFixed(1)+' MHz', 10, h-4);
-      ctx.fillText((maxF/1e6).toFixed(1)+' MHz', w-70, h-4);
-    }
-    function eventDetail(e) {
-      const p = e.payload || {};
-      if (e.type === 'anomaly') {
-        const labels = (p.classification && p.classification.labels) || [];
-        return (p.freq_hz/1e6).toFixed(3)+' MHz margin '+Number(p.margin_db).toFixed(1)+'dB '+labels.join(',');
-      }
-      if (e.type === 'doa') return (p.freq_hz/1e6).toFixed(3)+' MHz '+Number(p.bearing_deg).toFixed(0)+'\u00b0 conf '+Number(p.confidence).toFixed(0);
-      if (e.type === 'alert') return p.message || '';
-      if (e.type === 'handoff') return (p.freq_hz/1e6).toFixed(3)+' MHz task';
-      return e.type;
-    }
-    async function tick() {
-      $('clock').textContent = new Date().toLocaleTimeString();
-      try {
-        const [health, state, baseline, events, fleet] = await Promise.all([
-          fetch('/health').then(r => r.json()),
-          fetch('/state').then(r => r.json()),
-          fetch('/baseline').then(r => r.json()),
-          fetch('/events?limit=25').then(r => r.json()),
-          fetch('/fleet').then(r => r.json()),
-        ]);
-        const pill = $('status-pill'); pill.textContent = health.status; pill.className = 'pill ' + (health.status || 'degraded');
-        $('state-pill').textContent = health.state;
-        $('state').textContent = state.state;
-        $('age').textContent = health.kraken_age_s == null ? '—' : health.kraken_age_s.toFixed(1) + 's';
-        $('bins').textContent = baseline.count ?? baseline.bins?.length ?? 0;
-        const marks = (events || []).filter(e => e.type === 'anomaly').slice(0, 8).map(e => ({freq_hz: e.payload?.freq_hz})).filter(m => m.freq_hz);
-        drawWaterfall(baseline.bins || [], marks);
-        $('events').innerHTML = (events || []).map(e => `<tr><td>${fmtTime(e.timestamp)}</td><td>${e.type}</td><td>${eventDetail(e)}</td></tr>`).join('') || '<tr><td colspan=3 class=muted>No events</td></tr>';
-        const online = (fleet || []).filter(n => n.status === 'online' || n.status === 'busy').length;
-        $('fleet-online').textContent = online + ' / ' + (fleet || []).length;
-        $('fleet').innerHTML = (fleet || []).map(n => `<tr><td>${n.node_id}</td><td>${n.status}</td><td>${n.current_freq_hz ? (n.current_freq_hz/1e6).toFixed(3) : '—'}</td><td>${fmtTime(n.last_seen)}</td></tr>`).join('') || '<tr><td colspan=4 class=muted>No secondary nodes</td></tr>';
-      } catch (err) { console.error(err); }
-    }
-    tick(); setInterval(tick, 1500); window.addEventListener('resize', tick);
-  </script>
+<header>
+<h1>KRAKENBASE <span id="site-label" class="muted"></span></h1>
+<div><span id="clock" class="muted"></span><span id="status-pill" class="pill">...</span><span id="state-pill" class="pill">...</span></div>
+</header>
+<main>
+<section class="card span2"><h2>DF map log - site / LOB / est grid</h2><div id="map"></div>
+<p class="muted" style="margin:6px 0 0">Pins = estimated position after DF. Lines = LOB from array. History from audit store.</p></section>
+<section class="card"><h2>Power history</h2><canvas id="wf" height="160"></canvas></section>
+<section class="card"><h2>Status</h2><div class="row">
+<div class="stat"><div class="muted">State</div><div class="v" id="state">-</div></div>
+<div class="stat"><div class="muted">Kraken age</div><div class="v" id="age">-</div></div>
+<div class="stat"><div class="muted">DF pins</div><div class="v" id="pin-count">-</div></div>
+<div class="stat"><div class="muted">Fleet</div><div class="v" id="fleet-online">-</div></div>
+</div></section>
+<section class="card"><h2>Recent DF / events</h2><table><thead><tr><th>Time</th><th>Type</th><th>Detail</th></tr></thead><tbody id="events"></tbody></table></section>
+<section class="card"><h2>Fleet</h2><table><thead><tr><th>Node</th><th>Status</th><th>Freq</th><th>Seen</th></tr></thead><tbody id="fleet"></tbody></table></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let map,layerGroup,mapReady=false;
+function fmtTime(iso){try{return new Date(iso).toLocaleTimeString()}catch{return iso||'-'}}
+function destPoint(lat,lon,bearingDeg,rangeM){
+const R=6371000,d=rangeM/R,t=bearingDeg*Math.PI/180,p1=lat*Math.PI/180,l1=lon*Math.PI/180;
+const sinp2=Math.sin(p1)*Math.cos(d)+Math.cos(p1)*Math.sin(d)*Math.cos(t);
+const p2=Math.asin(Math.max(-1,Math.min(1,sinp2)));
+const y=Math.sin(t)*Math.sin(d)*Math.cos(p1),x=Math.cos(d)-Math.sin(p1)*Math.sin(p2);
+const l2=l1+Math.atan2(y,x);return[p2*180/Math.PI,((l2*180/Math.PI+540)%360)-180]}
+function initMap(site){if(mapReady)return;const lat=site.lat!=null?site.lat:34.73,lon=site.lon!=null?site.lon:-86.59;
+map=L.map('map').setView([lat,lon],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'OSM'}).addTo(map);
+layerGroup=L.layerGroup().addTo(map);mapReady=true}
+function renderMap(data){
+const site=data.site||{};initMap(site);layerGroup.clearLayers();const bounds=[];
+if(site.lat!=null&&site.lon!=null){L.circleMarker([site.lat,site.lon],{radius:8,color:'#3dd6c6',fillColor:'#3dd6c6',fillOpacity:.9,weight:2}).bindPopup('<b>'+(site.site_id||'site')+'</b><br>array').addTo(layerGroup);bounds.push([site.lat,site.lon])}
+(data.features||[]).forEach((f,i)=>{
+const brg=f.bearing_deg,range=f.est_range_m||site.default_range_m||2000;let pinLat=f.est_lat,pinLon=f.est_lon;
+if(site.lat!=null&&site.lon!=null&&brg!=null){
+if(pinLat==null||pinLon==null){const p=destPoint(site.lat,site.lon,brg,range);pinLat=p[0];pinLon=p[1]}
+const lobEnd=destPoint(site.lat,site.lon,brg,range);
+L.polyline([[site.lat,site.lon],lobEnd],{color:i===0?'#ff5c5c':'#f0a500',weight:i===0?3:1.5,opacity:i===0?.9:.45}).addTo(layerGroup);
+const mhz=f.freq_hz?(f.freq_hz/1e6).toFixed(4):'?';
+const popup='<b>'+mhz+' MHz</b><br>'+(brg!=null?Number(brg).toFixed(0):'?')+String.fromCharCode(176)+(f.confidence!=null?' c'+Number(f.confidence).toFixed(0):'')+(range?'<br>~'+Math.round(range)+' m ('+(f.est_method||'est')+')':'')+(f.timestamp?'<br>'+fmtTime(f.timestamp):'');
+L.circleMarker([pinLat,pinLon],{radius:i===0?7:5,color:i===0?'#ff5c5c':'#f0a500',fillColor:i===0?'#ff5c5c':'#f0a500',fillOpacity:.85,weight:2}).bindPopup(popup).addTo(layerGroup);bounds.push([pinLat,pinLon])}});
+if(bounds.length>1)try{map.fitBounds(bounds,{padding:[30,30],maxZoom:14})}catch(e){}$('pin-count').textContent=(data.features||[]).length}
+function eventDetail(e){const p=e.payload||{};if(e.type==='doa'){const mhz=p.freq_hz?(p.freq_hz/1e6).toFixed(4):'?';const brg=p.absolute_bearing_deg??p.bearing_deg;let s=mhz+' MHz '+(brg!=null?Number(brg).toFixed(0):'?')+'deg';if(p.est_lat!=null)s+=' '+Number(p.est_lat).toFixed(5)+','+Number(p.est_lon).toFixed(5);if(p.est_range_m!=null)s+=' ~'+Math.round(p.est_range_m)+'m';return s}if(e.type==='anomaly')return(p.freq_hz/1e6).toFixed(3)+' MHz margin '+Number(p.margin_db).toFixed(1)+'dB';if(e.type==='alert')return p.message||'';if(e.type==='handoff')return(p.freq_hz/1e6).toFixed(3)+' MHz task';return e.type}
+async function tick(){$('clock').textContent=new Date().toLocaleTimeString();try{
+const[health,state,events,fleet,mapData]=await Promise.all([
+fetch('/health').then(r=>r.json()),fetch('/state').then(r=>r.json()),
+fetch('/events?limit=30').then(r=>r.json()),fetch('/fleet').then(r=>r.json()).catch(()=>[]),
+fetch('/map/features?limit=50').then(r=>r.json())]);
+const pill=$('status-pill');pill.textContent=health.status;pill.className='pill '+(health.status||'degraded');
+$('state-pill').textContent=health.state;$('state').textContent=state.state;
+$('age').textContent=health.kraken_age_s==null?'-':health.kraken_age_s.toFixed(1)+'s';
+$('site-label').textContent=(mapData.site&&mapData.site.site_id)||'';renderMap(mapData);
+$('events').innerHTML=(events||[]).map(e=>'<tr><td>'+fmtTime(e.timestamp)+'</td><td>'+e.type+'</td><td>'+eventDetail(e)+'</td></tr>').join('')||'<tr><td colspan=3 class=muted>No events</td></tr>';
+const online=(fleet||[]).filter(n=>n.status==='online'||n.status==='busy').length;
+$('fleet-online').textContent=online+' / '+(fleet||[]).length;
+$('fleet').innerHTML=(fleet||[]).map(n=>'<tr><td>'+n.node_id+'</td><td>'+n.status+'</td><td>'+(n.current_freq_hz?(n.current_freq_hz/1e6).toFixed(3):'-')+'</td><td>'+fmtTime(n.last_seen)+'</td></tr>').join('')||'<tr><td colspan=4 class=muted>No secondary nodes</td></tr>'
+}catch(err){console.error(err)}}
+tick();setInterval(tick,2000);window.addEventListener('resize',()=>{if(map)map.invalidateSize()});
+</script>
 </body>
 </html>

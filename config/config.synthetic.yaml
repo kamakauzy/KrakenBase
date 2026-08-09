@@ -51,7 +51,7 @@ alert:
     enabled: true
 
 handoff:
-  enabled: false
+  enabled: true
   transport: "file"
   mqtt:
     host: "127.0.0.1"

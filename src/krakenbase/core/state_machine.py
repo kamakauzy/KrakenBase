@@ -33,6 +33,7 @@ class StateMachine:
         baseline: BaselineEngine,
         alert_fn: Callable[[DoaEvent], Awaitable[AlertEvent]] | None = None,
         handoff_fn: Callable[[DoaEvent], Awaitable[HandOffTask]] | None = None,
+        classifier=None,
     ):
         self.settings = settings
         self.kraken = kraken
@@ -40,6 +41,7 @@ class StateMachine:
         self.baseline = baseline
         self.alert_fn = alert_fn
         self.handoff_fn = handoff_fn
+        self.classifier = classifier
 
         self.state = SystemState.INIT
         self._running = False
@@ -54,10 +56,8 @@ class StateMachine:
         logger.info("STATE %s → %s  (%s)", old.value, new_state.value, reason)
 
     async def run(self) -> None:
-        """Main loop. Call from asyncio task."""
         self._running = True
         await self.transition(SystemState.SCANNING, "startup")
-
         while self._running:
             try:
                 if self.state == SystemState.SCANNING:
@@ -84,26 +84,28 @@ class StateMachine:
     def stop(self) -> None:
         self._running = False
 
-    # ------------------------------------------------------------------
-    # State handlers
-    # ------------------------------------------------------------------
-
     async def _scan_tick(self) -> None:
-        """Poll DOA (or synthetic) and feed the baseline engine."""
         readings = await self.kraken.fetch_doa()
         if not readings:
-            # No data – check health
             age = self.kraken.age_s
             if age is not None and age > 10.0:
                 await self.transition(SystemState.DEGRADED, f"Kraken silent for {age:.1f}s")
             await asyncio.sleep(self.settings.kraken.poll_interval_s)
             return
 
-        # Use the strongest / first reading for baseline observation
         for r in readings:
             anomaly = self.baseline.observe(r.freq_hz, r.rssi_db)
             if anomaly is not None:
-                await self.store.log_anomaly(anomaly)
+                if self.classifier is not None:
+                    try:
+                        clf = self.classifier.classify_anomaly(anomaly)
+                        payload = anomaly.model_dump(mode="json")
+                        payload["classification"] = clf.model_dump(mode="json")
+                        await self.store._insert(anomaly.event_id, "anomaly", payload)
+                    except Exception:
+                        await self.store.log_anomaly(anomaly)
+                else:
+                    await self.store.log_anomaly(anomaly)
                 self._current_anomaly = anomaly
                 await self.transition(SystemState.TASKING, f"anomaly at {anomaly.freq_hz}")
                 return
@@ -111,11 +113,9 @@ class StateMachine:
         await asyncio.sleep(self.settings.kraken.poll_interval_s)
 
     async def _task_tick(self) -> None:
-        """Retune Kraken to the anomalous frequency."""
         if self._current_anomaly is None:
             await self.transition(SystemState.SCANNING, "no anomaly")
             return
-
         freq = self._current_anomaly.freq_hz
         ok = await self.kraken.task_frequency(freq)
         if not ok:
@@ -123,42 +123,32 @@ class StateMachine:
             await self.transition(SystemState.SCANNING, "task failed")
             self._current_anomaly = None
             return
-
         self._dwell_readings = []
         self._dwell_start = time.time()
-        # Give the array time to settle / recalibrate
         await asyncio.sleep(self.settings.dwell.settle_s)
         await self.transition(SystemState.DWELLING, f"dwelling on {freq}")
 
     async def _dwell_tick(self) -> None:
-        """Collect DOA readings for the configured dwell window."""
         assert self._dwell_start is not None
         elapsed = time.time() - self._dwell_start
         max_dwell = self.settings.dwell.default_s
-
         readings = await self.kraken.fetch_doa()
         for r in readings:
             if r.confidence >= self.settings.kraken.min_confidence:
                 self._dwell_readings.append(r)
-
         if elapsed >= max_dwell or len(self._dwell_readings) >= self.settings.dwell.max_readings:
             await self.transition(SystemState.PROCESSING, f"collected {len(self._dwell_readings)} readings")
             return
-
         await asyncio.sleep(self.settings.kraken.poll_interval_s)
 
     async def _process_tick(self) -> None:
-        """Pick the best reading and build a DoaEvent."""
         if not self._dwell_readings:
             logger.info("No high-confidence readings during dwell")
             self._current_anomaly = None
             await self.transition(SystemState.SCANNING, "no usable DOA")
             return
-
         best = max(self._dwell_readings, key=lambda r: r.confidence)
-        # Apply array heading offset
         abs_bearing = (best.bearing_deg + self.settings.array.heading_offset_deg) % 360.0
-
         doa_event = DoaEvent(
             timestamp=utcnow(),
             freq_hz=best.freq_hz,
@@ -172,15 +162,13 @@ class StateMachine:
         )
         await self.store.log_doa(doa_event)
         self._last_doa_event = doa_event
-        await self.transition(SystemState.ALERTING, f"bearing {best.bearing_deg:.0f}° conf {best.confidence:.0f}")
+        await self.transition(SystemState.ALERTING, f"bearing {best.bearing_deg:.0f}\u00b0 conf {best.confidence:.0f}")
 
     async def _alert_tick(self) -> None:
-        """Emit alerts."""
         doa_event: DoaEvent = getattr(self, "_last_doa_event", None)
         if doa_event is None:
             await self.transition(SystemState.SCANNING, "missing doa event")
             return
-
         if self.alert_fn:
             try:
                 alert = await self.alert_fn(doa_event)
@@ -197,8 +185,7 @@ class StateMachine:
                     )
                 )
         else:
-            # Default local-only log
-            msg = f"DF {doa_event.freq_hz/1e6:.4f} MHz @ {doa_event.bearing_deg:.0f}° conf {doa_event.confidence:.0f}"
+            msg = f"DF {doa_event.freq_hz/1e6:.4f} MHz @ {doa_event.bearing_deg:.0f}\u00b0 conf {doa_event.confidence:.0f}"
             await self.store.log_alert(
                 AlertEvent(
                     channel="local",
@@ -208,11 +195,9 @@ class StateMachine:
                 )
             )
             logger.info("ALERT %s", msg)
-
         await self.transition(SystemState.HANDING_OFF, "alerts done")
 
     async def _handoff_tick(self) -> None:
-        """Publish hand-off task then return to scan."""
         doa_event: DoaEvent = getattr(self, "_last_doa_event", None)
         if doa_event and self.handoff_fn:
             try:
@@ -220,15 +205,12 @@ class StateMachine:
                 await self.store.log_handoff(task)
             except Exception as exc:
                 logger.error("Hand-off failed: %s", exc)
-
-        # Critical ROE: always release the array
         self._current_anomaly = None
         self._dwell_readings = []
         self._dwell_start = None
         await self.transition(SystemState.SCANNING, "dwell complete – back to scan")
 
     async def _recover_tick(self) -> None:
-        """Try to regain contact with Kraken."""
         readings = await self.kraken.fetch_doa()
         if readings:
             await self.transition(SystemState.SCANNING, "Kraken recovered")

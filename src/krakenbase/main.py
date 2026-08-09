@@ -16,7 +16,9 @@ from krakenbase.client.kraken import KrakenClient
 from krakenbase.client.synthetic import SyntheticKrakenClient
 from krakenbase.config import load_config
 from krakenbase.core.baseline import BaselineEngine
+from krakenbase.core.classifier import EmitterClassifier
 from krakenbase.core.state_machine import StateMachine
+from krakenbase.fleet.registry import FleetRegistry
 from krakenbase.handoff.publisher import HandOffPublisher
 from krakenbase.store.events import EventStore
 
@@ -57,6 +59,13 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
     baseline = BaselineEngine(settings.baseline)
     alerter = MeshtasticAlerter(settings.alert.meshtastic)
     publisher = HandOffPublisher(settings.handoff, settings.system.data_dir)
+    fleet = FleetRegistry()
+    known = Path(settings.system.data_dir) / "known_emitters.yaml"
+    if not known.exists():
+        known = Path("config/known_emitters.example.yaml")
+    classifier = EmitterClassifier(
+        settings.baseline, known_path=known if known.exists() else None
+    )
 
     async def alert_fn(doa):
         return await alerter.send(doa)
@@ -71,12 +80,16 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
         baseline=baseline,
         alert_fn=alert_fn,
         handoff_fn=handoff_fn if settings.handoff.enabled else None,
+        classifier=classifier,
     )
 
     app = create_app(
         get_state_machine=lambda: sm,
         get_store=lambda: store,
         get_kraken=lambda: kraken,
+        get_fleet=lambda: fleet,
+        get_baseline=lambda: baseline,
+        get_classifier=lambda: classifier,
         roe_version=settings.roe.version,
     )
 
@@ -138,16 +151,13 @@ def main() -> None:
     parser.add_argument(
         "--synthetic",
         action="store_true",
-        help="Force synthetic Kraken (no hardware). Also enabled when baseline.power_source=synthetic",
+        help="Force synthetic Kraken (no hardware)",
     )
     args = parser.parse_args()
 
     config_path = args.config
     if config_path is None:
-        candidates = [
-            "config.yaml",
-            "config/config.yaml",
-        ]
+        candidates = ["config.yaml", "config/config.yaml"]
         if args.synthetic:
             candidates.append("config/config.synthetic.yaml")
         candidates.append("config/config.example.yaml")

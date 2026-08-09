@@ -1,0 +1,86 @@
+# KrakenBase configuration example
+# Copy to config.yaml and adjust for your site.
+
+system:
+  name: "KrakenBase-Primary"
+  site_id: "patrol-base-01"
+  log_level: INFO
+  data_dir: "/var/lib/krakenbase"
+  audit_db: "/var/lib/krakenbase/events.db"
+
+kraken:
+  # Localhost when running on the same laptop
+  host: "127.0.0.1"
+  doa_port: 8081
+  settings_port: 8081          # or 8042 for middleware
+  poll_interval_s: 0.5
+  min_confidence: 70.0         # only alert / hand-off above this
+  request_timeout_s: 2.0
+  # How we task the array
+  control_method: "settings_json"   # settings_json | middleware
+
+array:
+  type: "UCA"                  # UCA | ULA | Custom
+  radius_m: 0.15               # critical for accuracy – measure it
+  heading_offset_deg: 0.0      # physical orientation of element 0 relative to true north
+  element_order: [0, 1, 2, 3, 4]
+
+baseline:
+  enabled: true
+  # Example tactical bands – adjust to your authorization
+  bands:
+    - name: "VHF"
+      start_hz: 136000000
+      stop_hz: 174000000
+      bin_hz: 25000
+    - name: "UHF"
+      start_hz: 400000000
+      stop_hz: 470000000
+      bin_hz: 25000
+    - name: "GMRS"
+      start_hz: 462500000
+      stop_hz: 467700000
+      bin_hz: 12500
+  update_interval_s: 30
+  anomaly_margin_db: 10.0
+  min_anomaly_duration_s: 2.0
+  # Source of power measurements: "kraken" | "rtl_power" | "synthetic"
+  power_source: "kraken"
+
+dwell:
+  default_s: 2.5
+  max_s: 5.0
+  settle_s: 1.0                # wait after retune before collecting DOA
+  max_readings: 5              # collect up to N readings and pick best
+
+alert:
+  meshtastic:
+    enabled: true
+    # device path or TCP – adjust to your radio
+    interface: "/dev/ttyUSB0"
+    channel_index: 0
+    rate_limit_s: 60           # minimum seconds between alerts for same freq
+  local:
+    enabled: true              # always log locally
+
+handoff:
+  enabled: true
+  transport: "mqtt"            # mqtt | http | udp | file
+  mqtt:
+    host: "127.0.0.1"
+    port: 1883
+    topic: "krakenbase/handoff"
+  defaults:
+    priority: 5
+    max_dwell_min: 30
+    record_iq: false
+
+status_api:
+  host: "127.0.0.1"
+  port: 8090
+  # Bind only to localhost by default
+
+roe:
+  version: "0.1"
+  require_audit: true
+  allow_tx: false              # hard-coded false in v1

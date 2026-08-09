@@ -1,0 +1,8 @@
+emitters:
+  - name: "Local repeater example"
+    freq_hz: 146940000
+    tolerance_hz: 5000
+    notes: "example only"
+  - name: "GMRS ch 15 example"
+    freq_hz: 462550000
+    tolerance_hz: 12500

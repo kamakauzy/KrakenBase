@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -131,3 +131,17 @@ class EventStore:
                 }
             )
         return results
+
+    async def purge_older_than(self, days: float) -> int:
+        """Delete events and state_log rows older than N days. Returns rows deleted."""
+        assert self._db is not None
+        if days <= 0:
+            return 0
+        cutoff = (utcnow() - timedelta(days=days)).isoformat()
+        cur1 = await self._db.execute("DELETE FROM events WHERE timestamp < ?", (cutoff,))
+        cur2 = await self._db.execute("DELETE FROM state_log WHERE timestamp < ?", (cutoff,))
+        await self._db.commit()
+        deleted = (cur1.rowcount or 0) + (cur2.rowcount or 0)
+        if deleted:
+            logger.info("Retention purge: removed %s rows older than %.1f days", deleted, days)
+        return deleted

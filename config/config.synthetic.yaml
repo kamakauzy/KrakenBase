@@ -1,0 +1,72 @@
+# Synthetic demo config – no Kraken hardware required.
+# Runs the full adaptive loop with injected anomalies.
+
+system:
+  name: "KrakenBase-Synthetic"
+  site_id: "synth-lab"
+  log_level: INFO
+  data_dir: "/tmp/krakenbase"
+  audit_db: "/tmp/krakenbase/events.db"
+
+kraken:
+  host: "127.0.0.1"
+  doa_port: 8081
+  settings_port: 8081
+  poll_interval_s: 0.4
+  min_confidence: 70.0
+  request_timeout_s: 2.0
+  control_method: "settings_json"
+
+array:
+  type: "UCA"
+  radius_m: 0.15
+  heading_offset_deg: 0.0
+  element_order: [0, 1, 2, 3, 4]
+
+baseline:
+  enabled: true
+  bands:
+    - name: "GMRS"
+      start_hz: 462500000
+      stop_hz: 467700000
+      bin_hz: 12500
+  update_interval_s: 10
+  anomaly_margin_db: 8.0
+  min_anomaly_duration_s: 1.5
+  power_source: "synthetic"
+
+dwell:
+  default_s: 2.0
+  max_s: 4.0
+  settle_s: 0.5
+  max_readings: 4
+
+alert:
+  meshtastic:
+    enabled: false
+    interface: "/dev/null"
+    channel_index: 0
+    rate_limit_s: 30
+  local:
+    enabled: true
+
+handoff:
+  enabled: false
+  transport: "file"
+  mqtt:
+    host: "127.0.0.1"
+    port: 1883
+    topic: "krakenbase/handoff"
+  defaults:
+    priority: 5
+    max_dwell_min: 10
+    record_iq: false
+
+status_api:
+  host: "127.0.0.1"
+  port: 8090
+
+roe:
+  version: "0.1"
+  require_audit: true
+  allow_tx: false

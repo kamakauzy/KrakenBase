@@ -17,6 +17,7 @@ from krakenbase.client.synthetic import SyntheticKrakenClient
 from krakenbase.config import load_config
 from krakenbase.core.baseline import BaselineEngine
 from krakenbase.core.state_machine import StateMachine
+from krakenbase.handoff.publisher import HandOffPublisher
 from krakenbase.store.events import EventStore
 
 logger = logging.getLogger("krakenbase")
@@ -55,9 +56,13 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
 
     baseline = BaselineEngine(settings.baseline)
     alerter = MeshtasticAlerter(settings.alert.meshtastic)
+    publisher = HandOffPublisher(settings.handoff, settings.system.data_dir)
 
     async def alert_fn(doa):
         return await alerter.send(doa)
+
+    async def handoff_fn(doa):
+        return await publisher.publish(doa)
 
     sm = StateMachine(
         settings=settings,
@@ -65,6 +70,7 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
         store=store,
         baseline=baseline,
         alert_fn=alert_fn,
+        handoff_fn=handoff_fn if settings.handoff.enabled else None,
     )
 
     app = create_app(

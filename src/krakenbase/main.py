@@ -102,10 +102,26 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
     sm_task = asyncio.create_task(sm.run())
     api_task = asyncio.create_task(server.serve())
 
+    async def retention_loop():
+        while not stop_event.is_set():
+            try:
+                days = settings.system.retention_days
+                if days > 0:
+                    await store.purge_older_than(days)
+            except Exception as exc:
+                logger.warning("Retention purge failed: %s", exc)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=3600.0)
+            except asyncio.TimeoutError:
+                pass
+
+    retention_task = asyncio.create_task(retention_loop())
+
     await stop_event.wait()
     sm.stop()
     server.should_exit = True
-    await asyncio.gather(sm_task, api_task, return_exceptions=True)
+    retention_task.cancel()
+    await asyncio.gather(sm_task, api_task, retention_task, return_exceptions=True)
     await kraken.close()
     await store.close()
     logger.info("KrakenBase stopped")

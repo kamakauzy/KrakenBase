@@ -1,0 +1,14 @@
+# KrakenBase – core dependencies (v0.1)
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+httpx>=0.27.0
+aiosqlite>=0.20.0
+pyyaml>=6.0.1
+apscheduler>=3.10.4
+psutil>=5.9.0
+
+# Optional – enable when ready
+# meshtastic>=2.3.0
+# paho-mqtt>=2.0.0

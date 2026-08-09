@@ -29,8 +29,8 @@ class DoaReading(BaseModel):
     """Normalized reading from Kraken DOA_value.html CSV."""
 
     timestamp: datetime
-    bearing_deg: float  # compass convention 0-359
-    confidence: float  # 0-100
+    bearing_deg: float
+    confidence: float
     rssi_db: float
     freq_hz: int
     array_type: str = "UCA"
@@ -69,7 +69,7 @@ class DoaEvent(BaseModel):
 class AlertEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=utcnow)
-    channel: str  # "meshtastic" | "local"
+    channel: str
     message: str
     related_doa_id: UUID
     success: bool
@@ -88,10 +88,49 @@ class HandOffTask(BaseModel):
 
 
 class HealthStatus(BaseModel):
-    status: str  # "ok" | "degraded" | "fault"
+    status: str
     state: SystemState
     kraken_age_s: float | None = None
     last_anomaly: datetime | None = None
     last_doa: datetime | None = None
     roe_version: str = "0.1"
     version: str = "0.1.0-dev"
+
+
+class ClassificationLabel(str, Enum):
+    UNKNOWN = "unknown"
+    NOISE = "noise"
+    NARROWBAND = "narrowband"
+    WIDEBAND = "wideband"
+    PERSISTENT = "persistent"
+    TRANSIENT = "transient"
+    KNOWN = "known"
+    TACTICAL_VOICE = "tactical_voice"
+    DATA_BURST = "data_burst"
+
+
+class ClassificationResult(BaseModel):
+    labels: list[ClassificationLabel] = Field(default_factory=list)
+    band_name: str | None = None
+    confidence: float = 0.0
+    known_name: str | None = None
+    notes: str | None = None
+    features: dict[str, float] = Field(default_factory=dict)
+
+
+class SecondaryNodeStatus(str, Enum):
+    ONLINE = "online"
+    BUSY = "busy"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+
+
+class SecondaryNode(BaseModel):
+    node_id: str
+    last_seen: datetime = Field(default_factory=utcnow)
+    status: SecondaryNodeStatus = SecondaryNodeStatus.UNKNOWN
+    capabilities: list[str] = Field(default_factory=lambda: ["rtl_sdr"])
+    current_freq_hz: int | None = None
+    last_task_id: str | None = None
+    site: str | None = None
+    notes: str | None = None

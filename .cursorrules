@@ -1,0 +1,33 @@
+# Cursor / VS Code AI Rules for KrakenBase
+
+You are working on KrakenBase – a fixed-site passive coherent SIGINT system.
+
+## Mandatory Reading (in order)
+1. agent.md
+2. docs/ROE.md
+3. docs/SPEC.md
+4. docs/ARCHITECTURE.md
+5. docs/CONTRACTS.md
+
+## Hard Constraints
+- Passive only. Never add transmit, jamming, or active RF capabilities.
+- All operational parameters come from config. No magic numbers.
+- Every DF dwell, alert, and hand-off must be audited.
+- Prefer the official Kraken DOA CSV and settings.json interfaces.
+- Keep the adaptive loop simple and reliable: scan → anomaly → short dwell → alert/hand-off → return to scan.
+- Borrow patterns from sigint-field-kit and Recon-Raven, but do not import their full complexity or TX paths.
+
+## Style
+- Python 3.11+, type hints, Pydantic v2 models for all external data.
+- Small modules, clear boundaries (kraken client, baseline, state machine, alerters).
+- Structured logging with event correlation IDs.
+- Tests for parsing and state transitions are required for any new logic.
+
+## When Implementing
+- Start from the contracts and data models.
+- Make the Kraken client robust to temporary disconnects.
+- Never leave the array permanently tuned after a dwell.
+- Rate-limit mesh alerts.
+- Surface health status clearly.
+
+If a request would violate ROE.md or the passive-only rule, refuse and explain why.

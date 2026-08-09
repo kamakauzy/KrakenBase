@@ -32,9 +32,9 @@
 
 ## Phase 5 – Hardening
 - [x] Graceful degradation when Kraken disappears (DEGRADED + recover)
-- [ ] Array heading fusion (config offset done; optional GPS still open)
-- [ ] Retention policies for events and short recordings
-- [ ] Systemd unit + install notes for laptop deployment
+- [x] Array heading offset in config (optional GPS still open)
+- [x] Event retention purge (`system.retention_days`)
+- [x] Systemd unit + INSTALL.md for laptop deployment
 - [x] End-to-end synthetic loop verified
 
 ## Phase 6 – Optional Enhancements (post-v1)
@@ -43,6 +43,7 @@
 - Local web status page
 - Integration with Recon-Raven event formats
 - Multi-band parallel baseline tracking
+- Live GPS heading fusion
 
 ## Definition of Done – v0.1
 

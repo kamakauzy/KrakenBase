@@ -1,56 +1,58 @@
 # KrakenBase – Implementation Roadmap
 
-## Phase 0 – Project Skeleton (current)
+## Phase 0 – Project Skeleton
 - [x] Repository structure
-- [x] agent.md, SPEC, ARCHITECTURE, CONTRACTS, ROE, DATA_MODELS
-- [x] Example configuration
-- [ ] Basic Python package layout + pyproject.toml / requirements.txt
+- [x] agent.md, SPEC, ARCHITECTURE, CONTRACTS, ROE, DATA_MODELS, USER_GUIDE
+- [x] Example + synthetic configuration
+- [x] Python package layout + pyproject.toml / requirements.txt
 
-## Phase 1 – Sensor Interface (MVP foundation)
-- [ ] Kraken client: parse `DOA_value.html` CSV → `DoaReading`
-- [ ] Health monitoring (last successful poll age)
-- [ ] Settings tasking (read/modify/upload settings.json or middleware)
-- [ ] Unit tests for CSV parsing and bearing normalization
+## Phase 1 – Sensor Interface
+- [x] Kraken client: parse `DOA_value.html` CSV → `DoaReading`
+- [x] Health monitoring (last successful poll age)
+- [x] Settings tasking (settings.json / middleware attempt)
+- [x] Unit tests for CSV parsing
+- [x] SyntheticKrakenClient for offline loop
 
 ## Phase 2 – Baseline + State Machine
-- [ ] Simple power baseline engine (start with one band or synthetic input)
-- [ ] Adaptive state machine implementing the core loop
-- [ ] SQLite event store + state transition logging
-- [ ] Configuration loading (YAML + env)
+- [x] Power baseline engine (warm-up + fire-once)
+- [x] Adaptive state machine (scan → task → dwell → alert → hand-off → scan)
+- [x] SQLite event store + state transition logging
+- [x] Configuration loading (YAML + env)
 
 ## Phase 3 – Alerting & Observability
-- [ ] Meshtastic publisher (text alerts)
-- [ ] Rate limiting / de-duplication
-- [ ] Minimal FastAPI status endpoints (`/health`, `/state`, `/events`)
-- [ ] Structured logging
+- [x] Meshtastic publisher (text alerts + local fallback)
+- [x] Rate limiting / de-duplication
+- [x] FastAPI `/health`, `/state`, `/events`
+- [x] Structured logging
 
 ## Phase 4 – Hand-off
-- [ ] HandOffTask model and publisher (MQTT or simple HTTP/UDP)
-- [ ] Example secondary-node consumer script (RTL-SDR lock + record)
-- [ ] Audit of every hand-off
+- [x] HandOffTask model + file/MQTT publisher
+- [x] Secondary-node consumer script (`scripts/secondary_monitor.py`)
+- [x] Audit of every hand-off
 
 ## Phase 5 – Hardening
-- [ ] Graceful degradation when Kraken disappears
-- [ ] Array heading fusion (config offset + optional GPS)
-- [ ] Retention policies for events and any short recordings
+- [x] Graceful degradation when Kraken disappears (DEGRADED + recover)
+- [ ] Array heading fusion (config offset done; optional GPS still open)
+- [ ] Retention policies for events and short recordings
 - [ ] Systemd unit + install notes for laptop deployment
-- [ ] End-to-end test with real or simulated Kraken output
+- [x] End-to-end synthetic loop verified
 
 ## Phase 6 – Optional Enhancements (post-v1)
 - Secondary node fleet management
 - Richer classification hints
 - Local web status page
-- Integration with existing Recon-Raven event formats for interoperability
+- Integration with Recon-Raven event formats
 - Multi-band parallel baseline tracking
 
 ## Definition of Done – v0.1
 
 A laptop running Ubuntu can:
-1. Start the official Kraken stack.
+1. Start the official Kraken stack **or** run `--synthetic`.
 2. Start KrakenBase.
-3. Detect a controlled test signal as an anomaly.
-4. Task the Kraken, obtain a bearing, log it, and send a Meshtastic alert.
-5. Automatically return to scanning.
-6. Survive temporary disconnection from the Kraken process.
+3. Detect a controlled / synthetic signal as an anomaly.
+4. Task the array (or synth), obtain a bearing, log it, alert.
+5. Optionally publish a hand-off task for a secondary monitor.
+6. Automatically return to scanning.
+7. Survive temporary disconnection from the Kraken process.
 
-All of the above must respect the ROE document.
+All of the above respects `docs/ROE.md`.

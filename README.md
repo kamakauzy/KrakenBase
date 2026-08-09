@@ -2,56 +2,72 @@
 
 **Fixed-site / patrol-base coherent SIGINT node**
 
-KrakenBase turns a KrakenSDR 5-channel array + laptop into an adaptive search → detect → DF → alert → hand-off system for permanent or semi-permanent installations.
+KrakenBase turns a KrakenSDR 5-channel array + laptop into an adaptive  
+**scan → detect → DF → alert → hand-off** system for permanent or semi-permanent sites.
 
-It is deliberately simpler and more operational than the portable Recon-Raven platform.  
-Design goals: fewer moving parts, battery-capable laptop host, clear ROE, clean hand-off of frequencies to secondary RTL-SDR monitors.
+Design goals: fewer moving parts than portable Recon-Raven, battery-capable laptop host, clear ROE, clean frequency hand-off to secondary RTL-SDR monitors. **Passive only in v1.**
 
-## Core Loop
+## Quick start (synthetic – no hardware)
 
-1. Continuously scan / maintain spectrum baseline across tactical bands  
-2. Detect anomaly (power, new emitter, persistent signal)  
-3. Task KrakenSDR for short coherent DOA dwell  
-4. Produce bearing + confidence + frequency  
-5. Emit mesh (Meshtastic) and/or local alert  
-6. Hand frequency to secondary monitor nodes for long-duration recording / transcription  
-7. Return array to scan mode
+```bash
+git clone https://github.com/kamakauzy/KrakenBase.git
+cd KrakenBase
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+python -m krakenbase.main --synthetic
+```
 
-## Key Design Decisions
+Status: http://127.0.0.1:8090/health  
 
-- **Laptop-first** (Ubuntu). Kraken software runs natively on x86.  
-- Single primary box preferred (fewer moving parts). Secondary RTL-SDR boxes optional.  
-- Purely passive by default. No transmit capability in v1.  
-- Borrows proven collectors and adaptive logic from `sigint-field-kit` and Recon-Raven, but does not carry their mobile/backpack complexity.  
-- Strict ROE and audit logging from day one.
+Full operator steps: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**  
+Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**
 
-## Hardware Baseline
+## Core loop
 
-| Component              | Role                                      | Notes                          |
-|------------------------|-------------------------------------------|--------------------------------|
-| KrakenSDR              | 5-channel coherent array                  | UCA preferred                  |
-| Laptop (Ubuntu 22.04+) | Heimdall + DOA DSP + KrakenBase brain     | 16 GB+ RAM recommended         |
-| GPS (optional)         | Absolute positioning / heading            | USB or built-in                |
-| Meshtastic radio       | Outbound alerts                           | USB/serial                     |
-| Secondary RTL-SDR nodes| Long-dwell monitoring & transcription     | Optional, taskable             |
+1. Maintain spectrum baseline across tactical bands  
+2. Detect sustained anomaly  
+3. Short coherent DOA dwell on KrakenSDR  
+4. Bearing + confidence + frequency  
+5. Mesh / local alert  
+6. Optional hand-off to secondary RTL-SDR monitor  
+7. Always return array to scan  
 
-## Quick Status
+## Hardware baseline
 
-This is a green-field project. The documentation set below is the starting point for AI-assisted implementation.
+| Component | Role |
+|-----------|------|
+| KrakenSDR (UCA) | 5-channel coherent array |
+| Laptop (Ubuntu 22.04+) | Heimdall + DOA + KrakenBase |
+| GPS (optional) | Absolute heading / position |
+| Meshtastic radio | Outbound alerts |
+| Secondary RTL-SDR | Long-dwell monitor / record |
 
-## Documentation Map
+## Docs
 
-| File                    | Purpose                                      |
-|-------------------------|----------------------------------------------|
-| `agent.md`              | Primary instructions for AI coding agents    |
-| `docs/SPEC.md`          | Functional & non-functional requirements     |
-| `docs/ARCHITECTURE.md`  | System design, components, data flow         |
-| `docs/CONTRACTS.md`     | APIs, message schemas, Kraken interfaces     |
-| `docs/ROE.md`           | Rules of Engagement, legal, safety           |
-| `docs/DATA_MODELS.md`   | Internal events, DB schema, baselines        |
-| `docs/ROADMAP.md`       | Phased implementation plan                   |
-| `config/config.example.yaml` | Configuration template                  |
+| File | Purpose |
+|------|---------|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Run, config, troubleshoot |
+| [docs/INSTALL.md](docs/INSTALL.md) | Ubuntu + systemd install |
+| [docs/ROE.md](docs/ROE.md) | Operational rules the code enforces |
+| [docs/SPEC.md](docs/SPEC.md) | Requirements |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design |
+| [docs/CONTRACTS.md](docs/CONTRACTS.md) | Kraken / event / API contracts |
+| [agent.md](agent.md) | Instructions for AI coding agents |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased status |
 
-## Legal
+## Secondary hand-off
 
-See `docs/ROE.md`. This system is for authorized training, research, and defensive spectrum monitoring only. Passive features are disabled by design in v1.
+```bash
+python scripts/secondary_monitor.py --watch /var/lib/krakenbase/handoff
+python scripts/secondary_monitor.py --watch /tmp/krakenbase/handoff --rtl
+```
+
+## Tests
+
+```bash
+pytest -v
+```
+
+## Legal / ROE
+
+Passive monitoring and DF only. No transmit paths in v1. See `docs/ROE.md`.

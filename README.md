@@ -32,6 +32,8 @@ Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**
 6. Optional hand-off to secondary RTL-SDR monitor  
 7. Always return array to scan  
 
+Optional post-v1: RF fingerprint / SEI on a **separate** receive chain (RSP1B preferred). See [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md). Does not replace Kraken bearings.
+
 ## Hardware baseline
 
 | Component | Role |
@@ -41,6 +43,7 @@ Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**
 | GPS (optional) | Absolute heading / position |
 | Meshtastic radio | Outbound alerts |
 | Secondary RTL-SDR | Long-dwell monitor / record |
+| SDRPlay RSP1B (planned) | RFF / SEI I/Q sensor — not the DF array |
 
 ## Docs
 
@@ -52,6 +55,7 @@ Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**
 | [docs/SPEC.md](docs/SPEC.md) | Requirements |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design |
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | Kraken / event / API contracts |
+| [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md) | RF fingerprint / SEI side path (design) |
 | [agent.md](agent.md) | Instructions for AI coding agents |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased status |
 

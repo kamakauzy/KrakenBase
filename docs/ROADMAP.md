@@ -44,6 +44,12 @@
 - Integration with Recon-Raven event formats
 - Multi-band parallel baseline tracking
 - Live GPS heading fusion
+- [x] RF fingerprint / SEI integration **design** — [docs/RFF_INTEGRATION.md](RFF_INTEGRATION.md)
+  - [ ] R0 contracts + fuse stub (`NO_MODEL`)
+  - [ ] R1 RSP1B/RTL burst capture + SigMF (no ML required)
+  - [ ] R2 offline ONNX embed + gallery
+  - [ ] R3 live async fuse into alerts / hand-off / RR export
+  - [ ] R4 SNR/recipe gates + operator label API
 
 ## Definition of Done – v0.1
 

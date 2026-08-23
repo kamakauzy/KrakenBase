@@ -1,13 +1,10 @@
 # KrakenBase
 
-**Fixed-site / patrol-base coherent SIGINT node**
+Patrol-base KrakenSDR node: **scan → detect → DF → alert → hand freq to an RTL → scan.**
 
-KrakenBase turns a KrakenSDR 5-channel array + laptop into an adaptive  
-**scan → detect → DF → alert → hand-off** system for permanent or semi-permanent sites.
+Passive only. No TX. No fingerprint theater on this branch.
 
-Design goals: fewer moving parts than portable Recon-Raven, battery-capable laptop host, clear ROE, clean frequency hand-off to secondary RTL-SDR monitors. **Passive only in v1.**
-
-## Quick start (synthetic – no hardware)
+## Quick start
 
 ```bash
 git clone https://github.com/kamakauzy/KrakenBase.git
@@ -17,70 +14,26 @@ pip install -e ".[dev]"
 python -m krakenbase.main --synthetic
 ```
 
-Status: http://127.0.0.1:8090/health  
+Status: http://127.0.0.1:8090/health
 
-Full operator steps: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**  
-Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**  
-DragonOS + Kraken array roll: **[docs/DRAGONOS.md](docs/DRAGONOS.md)**
+Live array: [docs/DRAGONOS.md](docs/DRAGONOS.md)  
+What this is (and is not): [docs/SCOPE.md](docs/SCOPE.md)
 
-## Core loop
-
-1. Maintain spectrum baseline across tactical bands  
-2. Detect sustained anomaly  
-3. Short coherent DOA dwell on KrakenSDR  
-4. Bearing + confidence + frequency  
-5. Mesh / local alert  
-6. Optional hand-off to secondary RTL-SDR monitor  
-7. Always return array to scan  
-
-Optional post-v1:
-- RF fingerprint / SEI on a **separate** receive chain (RSP1B preferred). [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md)
-- Remote RF UGS sidecar on grid-down camera poles. [docs/REMOTE_RF_UGS.md](docs/REMOTE_RF_UGS.md)
-
-Neither replaces Kraken bearings.
-
-## Hardware baseline
-
-| Component | Role |
-|-----------|------|
-| KrakenSDR (UCA) | 5-channel coherent array |
-| Laptop (DragonOS or Ubuntu 22.04+) | Heimdall + DOA + KrakenBase |
-| GPS (optional) | Absolute heading / position |
-| Meshtastic radio | Outbound alerts |
-| Secondary RTL-SDR | Long-dwell monitor / record |
-| SDRPlay RSP1B or extra RTL | RFF / long I/Q — **not** the DF array |
-| Remote UGS pole | Camera + sleeping RTL/RSP1B sidecar — not a second Kraken |
-
-## Docs
-
-| File | Purpose |
-|------|---------|
-| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Run, config, troubleshoot |
-| [docs/INSTALL.md](docs/INSTALL.md) | Ubuntu + systemd install |
-| [docs/DRAGONOS.md](docs/DRAGONOS.md) | DragonOS laptop + Kraken array roll |
-| [docs/ROE.md](docs/ROE.md) | Operational rules the code enforces |
-| [docs/SPEC.md](docs/SPEC.md) | Requirements |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design |
-| [docs/CONTRACTS.md](docs/CONTRACTS.md) | Kraken / event / API contracts |
-| [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md) | RF fingerprint / SEI side path |
-| [docs/REMOTE_RF_UGS.md](docs/REMOTE_RF_UGS.md) | Remote RF collector on camera poles |
-| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | What is actually true |
-| [agent.md](agent.md) | Instructions for AI coding agents |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phased status |
-
-## Secondary hand-off
+## Hand-off
 
 ```bash
 python scripts/secondary_monitor.py --watch /var/lib/krakenbase/handoff
-python scripts/secondary_monitor.py --watch /tmp/krakenbase/handoff --rtl
+python scripts/secondary_monitor.py --watch /var/lib/krakenbase/handoff --rtl
 ```
 
-## Tests
+## Not in main
+
+RFF, UGS, fleet, ATAK, and the 32-d "SEI" toy are on **`archive/phase6-rff-ugs`**.
 
 ```bash
-pytest -v
+git fetch origin archive/phase6-rff-ugs
 ```
 
-## Legal / ROE
+## Legal
 
-Passive monitoring and DF only. No transmit paths in v1. See `docs/ROE.md`.
+`docs/ROE.md`. `roe.allow_tx=true` will not start.

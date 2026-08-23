@@ -39,6 +39,7 @@ class HandOffPublisher:
             record_iq=self.settings.defaults.record_iq,
             created_at=utcnow(),
             source_event_id=doa.event_id,
+            target_node_id=self.settings.defaults.target_node_id,
         )
 
         if not self.settings.enabled:

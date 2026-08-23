@@ -11,7 +11,7 @@ from uuid import UUID
 
 import aiosqlite
 
-from krakenbase.models import AlertEvent, AnomalyEvent, DoaEvent, HandOffTask, utcnow
+from krakenbase.models import AlertEvent, AnomalyEvent, DoaEvent, HandOffTask, RffResult, UgsEvent, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,17 @@ class EventStore:
         )
         await self._db.commit()
 
-    async def log_anomaly(self, event: AnomalyEvent) -> None:
-        await self._insert(event.event_id, "anomaly", event.model_dump(mode="json"))
+    async def log_anomaly(self, event: AnomalyEvent, extra: dict[str, Any] | None = None) -> None:
+        payload = event.model_dump(mode="json")
+        if extra:
+            payload.update(extra)
+        await self._insert(event.event_id, "anomaly", payload)
+
+    async def log_rff(self, event: RffResult) -> None:
+        await self._insert(event.event_id, "rff", event.model_dump(mode="json"), related_id=event.source_event_id)
+
+    async def log_ugs(self, event: UgsEvent) -> None:
+        await self._insert(event.event_id, "ugs", event.model_dump(mode="json"), related_id=event.source_task_id)
 
     async def log_doa(self, event: DoaEvent) -> None:
         await self._insert(

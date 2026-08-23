@@ -1,4 +1,4 @@
-"""UGS node: synthetic, hand-off, camera, uplink. No TX."""
+"""UGS node: synthetic, hand-off, camera, uplink. U4 embed is RSP1B-only."""
 
 from __future__ import annotations
 
@@ -20,20 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 class UgsNode:
-    def __init__(
-        self,
-        node_id: str,
-        out_dir: str | Path,
-        recipe: CaptureRecipe,
-        sensor_id: str,
-        backend: str = "synthetic",
-        heartbeat_url: str | None = None,
-        token: str | None = None,
-        site: str | None = None,
-        rate_limit_s: float = 60.0,
-        uplink_dir: str | Path | None = None,
-        camera=None,
-    ):
+    def __init__(self, node_id: str, out_dir: str | Path, recipe: CaptureRecipe, sensor_id: str,
+                 backend: str = "synthetic", heartbeat_url: str | None = None, token: str | None = None,
+                 site: str | None = None, rate_limit_s: float = 60.0, uplink_dir: str | Path | None = None,
+                 camera=None, embed: bool = False, gallery=None, min_snr_db: float = 8.0):
         self.node_id = node_id
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -46,6 +36,9 @@ class UgsNode:
         self.rate_limit_s = rate_limit_s
         self.uplink_dir = Path(uplink_dir) if uplink_dir else None
         self.camera = camera
+        self.embed = embed
+        self.gallery = gallery
+        self.min_snr_db = min_snr_db
         self._seen: set[str] = set()
         self._last_uplink: dict[int, float] = {}
 
@@ -67,6 +60,8 @@ class UgsNode:
             sensor_id=self.sensor_id, recipe_id=self.recipe.recipe_id, burst_path=str(burst.meta_path),
             source_task_id=source_task_id, notes=notes or f"backend={burst.backend}",
         )
+        if self.embed:
+            event = self._maybe_embed(event, burst.meta_path)
         path = self._write_event(event)
         if self.uplink_dir:
             self.uplink_dir.mkdir(parents=True, exist_ok=True)
@@ -74,11 +69,24 @@ class UgsNode:
         logger.info("UGS %s %s %.4f MHz -> %s", self.node_id, trigger.value, freq_hz / 1e6, burst.meta_path.name)
         return event
 
+    def _maybe_embed(self, event: UgsEvent, meta_path) -> UgsEvent:
+        if self.recipe.sensor_class != "rsp1b":
+            event.notes = f"{event.notes or ''}|embed=refused class={self.recipe.sensor_class}".strip("|")
+            return event
+        if self.gallery is None:
+            event.notes = f"{event.notes or ''}|embed=no-gallery".strip("|")
+            return event
+        from krakenbase.rff.gallery import Gallery as _G
+        gal = self.gallery if hasattr(self.gallery, "ingest_sigmf") else _G(self.gallery)
+        result = gal.ingest_sigmf(meta_path, sensor_id=self.sensor_id, recipe_id=self.recipe.recipe_id,
+                                 freq_hz=event.freq_hz, min_snr_db=self.min_snr_db)
+        event.notes = f"{event.notes or ''}|rff={result.disposition.value}:{result.emitter_uid or '-'}".strip("|")
+        return event
+
     def allow_uplink(self, freq_hz: int) -> bool:
         now = time.time()
         last = self._last_uplink.get(freq_hz, 0.0)
         if now - last < self.rate_limit_s:
-            logger.info("UGS rate-limit skip %s Hz", freq_hz)
             return False
         self._last_uplink[freq_hz] = now
         return True
@@ -99,18 +107,14 @@ class UgsNode:
         return ev
 
     def radio_ready(self) -> bool:
-        if self.backend == "rtl":
-            return shutil.which("rtl_sdr") is not None
-        return True
+        return shutil.which("rtl_sdr") is not None if self.backend == "rtl" else True
 
     def heartbeat_status(self) -> str:
         return "online" if self.radio_ready() else "degraded"
 
     def handle_task(self, task: HandOffTask) -> UgsEvent | None:
         tid = str(task.task_id)
-        if tid in self._seen:
-            return None
-        if not accepts_handoff(self.node_id, task):
+        if tid in self._seen or not accepts_handoff(self.node_id, task):
             return None
         self._seen.add(tid)
         return self.capture(task.freq_hz, UgsTrigger.HANDOFF, source_task_id=task.task_id)
@@ -147,16 +151,11 @@ class UgsNode:
     def heartbeat(self, status: str | None = None, current_freq_hz: int | None = None) -> None:
         if not self.heartbeat_url:
             return
-        status = status or self.heartbeat_status()
         headers = {"X-API-Token": self.token} if self.token else {}
-        body = {
-            "node_id": self.node_id,
-            "status": status,
-            "capabilities": [f"ugs_{self.recipe.sensor_class}", "ugs_camera" if self.camera else "rtl_sdr"],
-            "current_freq_hz": current_freq_hz,
-            "site": self.site,
-            "notes": None if self.radio_ready() else "no rtl_sdr",
-        }
+        body = {"node_id": self.node_id, "status": status or self.heartbeat_status(),
+                "capabilities": [f"ugs_{self.recipe.sensor_class}", "ugs_camera" if self.camera else "rtl_sdr"],
+                "current_freq_hz": current_freq_hz, "site": self.site,
+                "notes": None if self.radio_ready() else "no rtl_sdr"}
         try:
             httpx.post(self.heartbeat_url, json=body, headers=headers, timeout=3.0).raise_for_status()
         except Exception as exc:

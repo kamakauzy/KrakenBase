@@ -50,6 +50,12 @@
   - [ ] R2 offline ONNX embed + gallery
   - [ ] R3 live async fuse into alerts / hand-off / RR export
   - [ ] R4 SNR/recipe gates + operator label API
+- [x] Remote RF UGS sidecar **design** — [docs/REMOTE_RF_UGS.md](REMOTE_RF_UGS.md)
+  - [ ] U0 contracts (`UgsEvent`, `target_node_id`)
+  - [ ] U1 bench node + synthetic trigger + local burst
+  - [ ] U2 camera-pole / ONVIF + fleet heartbeat
+  - [ ] U3 primary hand-off ↔ UGS event loop + ATAK/RR
+  - [ ] U4 optional ONNX embed on RSP1B poles only
 
 ## Definition of Done – v0.1
 

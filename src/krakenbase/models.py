@@ -53,6 +53,67 @@ class AnomalyEvent(BaseModel):
     source: str = "baseline_engine"
 
 
+class RffDisposition(str, Enum):
+    NO_MODEL = "NO_MODEL"
+    LOW_SNR = "LOW_SNR"
+    RECIPE_MISMATCH = "RECIPE_MISMATCH"
+    RFF_MATCH = "RFF_MATCH"
+    NEW = "NEW"
+    REPEAT = "REPEAT"
+
+
+class RffResult(BaseModel):
+    event_id: UUID = Field(default_factory=uuid4)
+    timestamp: datetime = Field(default_factory=utcnow)
+    freq_hz: int
+    sensor_id: str = "none"
+    recipe_id: str = "none"
+    disposition: RffDisposition = RffDisposition.NO_MODEL
+    emitter_uid: str | None = None
+    score: float | None = None
+    source_event_id: UUID | None = None
+    notes: str | None = None
+
+
+class UgsTrigger(str, Enum):
+    HANDOFF = "handoff"
+    CAMERA = "camera"
+    PIR = "pir"
+    SEISMIC = "seismic"
+    MAG = "mag"
+    ENERGY = "energy"
+    SCHEDULE = "schedule"
+    MANUAL = "manual"
+
+
+class UgsEvent(BaseModel):
+    event_id: UUID = Field(default_factory=uuid4)
+    node_id: str
+    timestamp: datetime = Field(default_factory=utcnow)
+    trigger: UgsTrigger
+    freq_hz: int | None = None
+    bandwidth_hz: int | None = None
+    rssi_db: float | None = None
+    snr_db: float | None = None
+    duration_ms: int = 0
+    sensor_id: str
+    recipe_id: str = "none"
+    burst_path: str | None = None
+    source_task_id: UUID | None = None
+    camera_id: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    notes: str | None = None
+
+
+CAP_RTL_SDR = "rtl_sdr"
+CAP_UGS_RTL_V4 = "ugs_rtl_v4"
+CAP_UGS_RTL_V3 = "ugs_rtl_v3"
+CAP_UGS_RSP1B = "ugs_rsp1b"
+CAP_UGS_CAMERA = "ugs_camera"
+CAP_RFF_EMBED = "rff_embed"
+
+
 class DoaEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=utcnow)
@@ -64,6 +125,7 @@ class DoaEvent(BaseModel):
     related_anomaly_id: UUID | None = None
     dwell_s: float
     reading: DoaReading
+    rff: RffResult | None = None
 
 
 class AlertEvent(BaseModel):
@@ -85,6 +147,7 @@ class HandOffTask(BaseModel):
     record_iq: bool = False
     created_at: datetime = Field(default_factory=utcnow)
     source_event_id: UUID
+    target_node_id: str | None = None
 
 
 class HealthStatus(BaseModel):

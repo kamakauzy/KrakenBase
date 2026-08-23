@@ -20,7 +20,8 @@ python -m krakenbase.main --synthetic
 Status: http://127.0.0.1:8090/health  
 
 Full operator steps: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**  
-Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**
+Laptop install + systemd: **[docs/INSTALL.md](docs/INSTALL.md)**  
+DragonOS + Kraken array roll: **[docs/DRAGONOS.md](docs/DRAGONOS.md)**
 
 ## Core loop
 
@@ -43,12 +44,12 @@ Neither replaces Kraken bearings.
 | Component | Role |
 |-----------|------|
 | KrakenSDR (UCA) | 5-channel coherent array |
-| Laptop (Ubuntu 22.04+) | Heimdall + DOA + KrakenBase |
+| Laptop (DragonOS or Ubuntu 22.04+) | Heimdall + DOA + KrakenBase |
 | GPS (optional) | Absolute heading / position |
 | Meshtastic radio | Outbound alerts |
 | Secondary RTL-SDR | Long-dwell monitor / record |
-| SDRPlay RSP1B (planned) | RFF / SEI I/Q sensor — not the DF array |
-| Remote UGS pole (planned) | Camera + sleeping RTL/RSP1B sidecar — not a second Kraken |
+| SDRPlay RSP1B or extra RTL | RFF / long I/Q — **not** the DF array |
+| Remote UGS pole | Camera + sleeping RTL/RSP1B sidecar — not a second Kraken |
 
 ## Docs
 
@@ -56,12 +57,14 @@ Neither replaces Kraken bearings.
 |------|---------|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Run, config, troubleshoot |
 | [docs/INSTALL.md](docs/INSTALL.md) | Ubuntu + systemd install |
+| [docs/DRAGONOS.md](docs/DRAGONOS.md) | DragonOS laptop + Kraken array roll |
 | [docs/ROE.md](docs/ROE.md) | Operational rules the code enforces |
 | [docs/SPEC.md](docs/SPEC.md) | Requirements |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design |
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | Kraken / event / API contracts |
-| [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md) | RF fingerprint / SEI side path (design) |
-| [docs/REMOTE_RF_UGS.md](docs/REMOTE_RF_UGS.md) | Remote RF collector on camera poles (design) |
+| [docs/RFF_INTEGRATION.md](docs/RFF_INTEGRATION.md) | RF fingerprint / SEI side path |
+| [docs/REMOTE_RF_UGS.md](docs/REMOTE_RF_UGS.md) | Remote RF collector on camera poles |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | What is actually true |
 | [agent.md](agent.md) | Instructions for AI coding agents |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased status |
 

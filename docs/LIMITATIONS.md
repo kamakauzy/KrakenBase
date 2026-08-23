@@ -18,7 +18,9 @@ Honest status. Design docs are not features.
 | Recon-Raven export | Yes – `scripts/export_rr.py` |
 | Meshtastic alerts | Yes – if radio/CLI works; otherwise **local log** (`channel=local`) |
 | Secondary hand-off | Yes – **file default**; MQTT if `paho-mqtt` installed |
-| RF fingerprint / remote UGS | **Design only** – see RFF + REMOTE_RF_UGS docs |
+| RF fingerprint | Bench path yes (`builtin_v0` + gallery). Not paper SEI. No live Soapy/RSP1B writer. |
+| Remote UGS | Sidecar yes (synthetic/rtl capture, camera poll, shop ingest). `cue_dwell` default off. |
+| ATAK | `.cot` file drop only. Not a TAK server. |
 | Status UI | Partial – `web/index.html` + APIs. OSM tiles need network. |
 | TX / probe / jam | **No** – `roe.allow_tx=true` refuses to start |
 

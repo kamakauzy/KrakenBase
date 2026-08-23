@@ -183,7 +183,7 @@ class MeshtasticAlerter:
             else:
                 channel = "local"
                 success = True
-                error = f"iface:{err or '-'}; cli:{err2 or '-'}"
+                error = f"mesh-failed iface:{err or '-'}; cli:{err2 or '-'}"
                 logger.info("LOCAL ALERT (mesh failed): %s  (%s)", msg, error)
 
         return AlertEvent(

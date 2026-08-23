@@ -91,6 +91,13 @@ class HandOffDefaults(BaseModel):
     priority: int = 5
     max_dwell_min: int = 30
     record_iq: bool = False
+    target_node_id: str | None = None
+
+
+class RffSettings(BaseModel):
+    enabled: bool = False
+    sensor_id: str = "none"
+    recipe_id: str = "none"
 
 
 class MqttSettings(BaseModel):
@@ -138,6 +145,7 @@ class Settings(BaseSettings):
     status_api: StatusApiSettings = Field(default_factory=StatusApiSettings)
     roe: RoeSettings = Field(default_factory=RoeSettings)
     site: SiteSettings = Field(default_factory=SiteSettings)
+    rff: RffSettings = Field(default_factory=RffSettings)
 
     model_config = {"env_prefix": "KB_", "env_nested_delimiter": "__"}
 

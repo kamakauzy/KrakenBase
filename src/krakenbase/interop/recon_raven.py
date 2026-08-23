@@ -19,12 +19,10 @@ def kb_event_to_rr(row: dict[str, Any], site_id: str = "krakenbase") -> dict[str
             payload = json.loads(payload)
         except Exception:
             payload = {}
-
     kind = row.get("type") or payload.get("type") or "event"
     ts = row.get("timestamp") or payload.get("timestamp")
     if isinstance(ts, datetime):
         ts = ts.isoformat()
-
     tags: list[str] = []
     clf = payload.get("classification") or {}
     if isinstance(clf, dict):
@@ -34,7 +32,19 @@ def kb_event_to_rr(row: dict[str, Any], site_id: str = "krakenbase") -> dict[str
             tags.append(f"known:{clf['known_name']}")
         if clf.get("band_name"):
             tags.append(f"band:{clf['band_name']}")
-
+    rff = payload.get("rff") or {}
+    if isinstance(rff, dict) and rff.get("disposition"):
+        tags.append(f"rff:{rff.get('disposition')}")
+        if rff.get("emitter_uid"):
+            tags.append(f"uid:{rff['emitter_uid']}")
+    if payload.get("rff_disposition"):
+        tags.append(f"rff:{payload['rff_disposition']}")
+    if payload.get("emitter_uid"):
+        tags.append(f"uid:{payload['emitter_uid']}")
+    if payload.get("trigger"):
+        tags.append(f"ugs:{payload['trigger']}")
+    if payload.get("node_id") and kind == "ugs":
+        tags.append(f"node:{payload['node_id']}")
     return {
         "id": str(row.get("id") or payload.get("event_id") or uuid4()),
         "ts": ts,
@@ -51,18 +61,13 @@ def kb_event_to_rr(row: dict[str, Any], site_id: str = "krakenbase") -> dict[str
     }
 
 
-def export_events_jsonl(
-    rows: Iterable[dict[str, Any]],
-    out_path: str | Path,
-    site_id: str = "krakenbase",
-) -> int:
+def export_events_jsonl(rows: Iterable[dict[str, Any]], out_path: str | Path, site_id: str = "krakenbase") -> int:
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with path.open("w") as f:
         for row in rows:
-            evt = kb_event_to_rr(row, site_id=site_id)
-            f.write(json.dumps(evt, default=str) + "\n")
+            f.write(json.dumps(kb_event_to_rr(row, site_id=site_id), default=str) + "\n")
             n += 1
     logger.info("Exported %d events to %s", n, path)
     return n

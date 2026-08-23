@@ -31,14 +31,11 @@ def fuse_doa(
     burst_dir: str | Path | None,
     sensor_id: str,
     recipe_id: str,
+    min_snr_db: float | None = None,
 ) -> RffResult:
     burst = find_burst(burst_dir, doa.freq_hz)
     if gallery is None or burst is None:
         return fuse_stub(doa, sensor_id=sensor_id, recipe_id=recipe_id)
     return fuse(
-        doa,
-        burst_meta=burst,
-        gallery=gallery,
-        sensor_id=sensor_id,
-        recipe_id=recipe_id,
+        doa, burst_meta=burst, gallery=gallery, sensor_id=sensor_id, recipe_id=recipe_id, min_snr_db=min_snr_db,
     )

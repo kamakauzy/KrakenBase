@@ -58,8 +58,7 @@ def embed_iq(iq: list[tuple[float, float]]) -> list[float]:
         bins[k] = math.sqrt(re * re + im * im) / n
     hist = [0.0] * 8
     for pwr in powers:
-        a = math.sqrt(pwr)
-        idx = min(7, int(a * 8))
+        idx = min(7, int(math.sqrt(pwr) * 8))
         hist[idx] += 1.0
     hist = [h / n for h in hist]
     dpow = 0.0
@@ -70,22 +69,29 @@ def embed_iq(iq: list[tuple[float, float]]) -> list[float]:
         if prev * iq[i][0] < 0:
             zc += 1
         prev = iq[i][0]
-    vec = [mi, mq, vi, vq, mean_p, max_p, papr, mag_mean] + bins + hist + [
-        dpow / n,
-        zc / n,
-        min(1.0, n / MAX_SAMPLES),
-        mean_p - vi,
-    ]
+    vec = [mi, mq, vi, vq, mean_p, max_p, papr, mag_mean] + bins + hist + [dpow / n, zc / n, min(1.0, n / MAX_SAMPLES), mean_p - vi]
     while len(vec) < DIM:
         vec.append(0.0)
     return _l2(vec[:DIM])
+
+
+def estimate_snr_db(iq: list[tuple[float, float]]) -> float:
+    if not iq:
+        return 0.0
+    powers = [p[0] * p[0] + p[1] * p[1] for p in iq]
+    powers.sort()
+    n = max(1, len(powers) // 5)
+    noise = sum(powers[:n]) / n
+    sig = sum(powers) / len(powers)
+    if noise <= 1e-12:
+        return 40.0 if sig > 1e-8 else 0.0
+    return 10.0 * math.log10(max(sig, 1e-18) / noise)
 
 
 def embed_sigmf(meta_path: str | Path) -> tuple[list[float], dict]:
     meta, blob = read_sigmf(meta_path)
     g = meta["global"]
     iq = _iq_from_blob(g["core:datatype"], blob)
-    vec = embed_iq(iq)
     info = {
         "embedder_id": EMBEDDER_ID,
         "dim": DIM,
@@ -94,8 +100,9 @@ def embed_sigmf(meta_path: str | Path) -> tuple[list[float], dict]:
         "sensor_class": g.get("krakenbase:sensor_class"),
         "freq_hz": meta["captures"][0]["core:frequency"] if meta.get("captures") else None,
         "hw": g.get("core:hw"),
+        "snr_db": estimate_snr_db(iq),
     }
-    return vec, info
+    return embed_iq(iq), info
 
 
 def cosine(a: list[float], b: list[float]) -> float:

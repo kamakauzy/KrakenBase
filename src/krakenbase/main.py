@@ -57,9 +57,9 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
         kraken = KrakenClient(settings.kraken)
 
     baseline = BaselineEngine(settings.baseline)
-    alerter = MeshtasticAlerter(settings.alert.meshtastic)
+    alerter = MeshtasticAlerter(settings.alert.meshtastic, site_id=settings.system.site_id)
     publisher = HandOffPublisher(settings.handoff, settings.system.data_dir)
-    fleet = FleetRegistry()
+    fleet = FleetRegistry(db_path=Path(settings.system.data_dir) / "fleet.db")
     known = Path(settings.system.data_dir) / "known_emitters.yaml"
     if not known.exists():
         known = Path("config/known_emitters.example.yaml")

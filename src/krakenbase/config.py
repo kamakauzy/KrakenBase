@@ -25,6 +25,22 @@ class ArraySettings(BaseModel):
     radius_m: float = 0.15
     heading_offset_deg: float = 0.0
     element_order: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    nmea_path: str | None = None
+    heading_stale_s: float = 30.0
+
+
+class SiteSettings(BaseModel):
+    """Optional site origin for single-LOB projection (not a cross-fix)."""
+
+    lat: float | None = None
+    lon: float | None = None
+    default_range_m: float = 500.0
+    min_range_m: float = 25.0
+    max_range_m: float = 5000.0
+    use_rssi_range: bool = False
+    rssi_ref_db: float = -40.0
+    rssi_ref_range_m: float = 100.0
+    path_loss_n: float = 2.5
 
 
 class BandConfig(BaseModel):
@@ -55,6 +71,11 @@ class MeshtasticSettings(BaseModel):
     interface: str = "/dev/ttyUSB0"
     channel_index: int = 0
     rate_limit_s: float = 60.0
+    include_site: bool = True
+    destination: str | None = None
+    want_ack: bool = False
+    hop_limit: int = 3
+    cli_fallback: bool = True
 
 
 class AlertSettings(BaseModel):
@@ -111,6 +132,7 @@ class Settings(BaseSettings):
     handoff: HandOffSettings = Field(default_factory=HandOffSettings)
     status_api: StatusApiSettings = Field(default_factory=StatusApiSettings)
     roe: RoeSettings = Field(default_factory=RoeSettings)
+    site: SiteSettings = Field(default_factory=SiteSettings)
 
     model_config = {"env_prefix": "KB_", "env_nested_delimiter": "__"}
 

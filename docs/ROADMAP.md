@@ -44,22 +44,23 @@
 - Integration with Recon-Raven event formats
 - Multi-band parallel baseline tracking
 - [x] Live GPS heading fusion (DOA heading + optional NMEA)
-- [x] RF fingerprint / SEI integration **design** — [docs/RFF_INTEGRATION.md](RFF_INTEGRATION.md)
+- [x] RF fingerprint / SEI integration — [docs/RFF_INTEGRATION.md](RFF_INTEGRATION.md)
   - [x] R0 contracts + fuse stub (`NO_MODEL`)
   - [x] R1 RSP1B/RTL burst capture + SigMF (no ML required)
   - [x] R2 offline embed + gallery (`builtin_v0`; paper ONNX still not public)
-  - [ ] R3 live async fuse into alerts / hand-off / RR export
-  - [ ] R4 SNR/recipe gates + operator label API
-- [x] Remote RF UGS sidecar **design** — [docs/REMOTE_RF_UGS.md](REMOTE_RF_UGS.md)
+  - [x] R3 live async fuse into alerts / hand-off / RR export
+  - [x] R4 SNR/recipe gates + operator label API
+- [x] Remote RF UGS sidecar — [docs/REMOTE_RF_UGS.md](REMOTE_RF_UGS.md)
   - [x] U0 contracts (`UgsEvent`, `target_node_id`)
   - [x] U1 bench node + synthetic trigger + local burst
   - [x] U2 camera-pole / ONVIF + fleet heartbeat
-  - [ ] U3 primary hand-off ↔ UGS event loop + ATAK/RR
-  - [ ] U4 optional ONNX embed on RSP1B poles only
+  - [x] U3 primary hand-off ↔ UGS event loop + ATAK/RR
+  - [x] U4 optional embed on RSP1B poles only (`builtin_v0`; ONNX file optional / not shipped)
+- [x] DragonOS + Kraken array roll — [docs/DRAGONOS.md](DRAGONOS.md)
 
 ## Definition of Done – v0.1
 
-A laptop running Ubuntu can:
+A laptop running Ubuntu or DragonOS can:
 1. Start the official Kraken stack **or** run `--synthetic`.
 2. Start KrakenBase.
 3. Detect a controlled / synthetic signal as an anomaly.

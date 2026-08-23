@@ -34,10 +34,11 @@ def create_app(
     get_baseline=None,
     get_classifier=None,
     get_settings=None,
+    get_gallery=None,
+    ingest_ugs=None,
     roe_version: str = "0.1",
 ) -> FastAPI:
     app = FastAPI(title="KrakenBase", version=__version__)
-
     static_dir = STATIC_DIR / "static"
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -76,48 +77,26 @@ def create_app(
             status = "degraded" if sm.state == SystemState.DEGRADED else "fault"
         elif age is None or age > 5.0:
             status = "degraded"
-
         return HealthStatus(
-            status=status,
-            state=sm.state,
-            kraken_age_s=age,
-            roe_version=roe_version,
-            version=__version__,
-        ).model_dump()
+            status=status, state=sm.state, kraken_age_s=age, roe_version=roe_version, version=__version__
+        ).model_dump(mode="json")
 
     @app.get("/state")
     async def state() -> dict[str, Any]:
         sm = get_state_machine()
-        heading = getattr(sm, "heading", None)
-        return {
-            "state": sm.state.value,
-            "has_anomaly": sm._current_anomaly is not None,
-            "dwell_readings": len(getattr(sm, "_dwell_readings", [])),
-            "heading": heading.snapshot() if heading is not None else None,
-        }
+        return {"state": sm.state.value}
 
     @app.get("/events")
     async def events(limit: int = 50, type: str | None = None) -> list[dict[str, Any]]:
-        store = get_store()
-        return await store.recent(limit=limit, event_type=type)
+        return await get_store().recent(limit=limit, event_type=type)
 
     @app.get("/baseline")
     async def baseline_snapshot() -> dict[str, Any]:
         if not get_baseline:
             return {"bins": []}
         eng = get_baseline()
-        bins = []
-        for freq, stats in sorted(eng._bins.items()):
-            if stats.mean_db is None:
-                continue
-            bins.append(
-                {
-                    "freq_hz": freq,
-                    "mean_db": round(stats.mean_db, 1),
-                    "count": stats.count,
-                    "ready": stats.ready,
-                }
-            )
+        bins = [{"freq_hz": f, "mean_db": round(s.mean_db, 1), "count": s.count, "ready": s.ready}
+                for f, s in sorted(eng._bins.items()) if s.mean_db is not None]
         return {"bins": bins, "count": len(bins), "bands": eng.band_summary()}
 
     @app.get("/waterfall")
@@ -136,40 +115,23 @@ def create_app(
             "lon": settings.site.lon if settings else None,
             "default_range_m": settings.site.default_range_m if settings else 500.0,
         }
-        store = get_store()
-        events = await store.recent(limit=limit, event_type="doa")
+        events = await get_store().recent(limit=limit, event_type="doa")
         features = []
         for ev in events:
             p = ev.get("payload") or {}
             bearing = p.get("absolute_bearing_deg", p.get("bearing_deg"))
-            est = None
-            if settings is not None and bearing is not None:
-                est = project_emitter(
-                    float(bearing),
-                    settings.site,
-                    rssi_db=p.get("rssi_db"),
-                )
-            features.append(
-                {
-                    "id": ev.get("id"),
-                    "timestamp": ev.get("timestamp") or p.get("timestamp"),
-                    "freq_hz": p.get("freq_hz"),
-                    "bearing_deg": bearing,
-                    "confidence": p.get("confidence"),
-                    "rssi_db": p.get("rssi_db"),
-                    "est_lat": est.lat if est else None,
-                    "est_lon": est.lon if est else None,
-                    "est_range_m": est.range_m if est else None,
-                    "est_method": est.method if est else None,
-                }
-            )
+            est = project_emitter(float(bearing), settings.site, rssi_db=p.get("rssi_db")) if settings is not None and bearing is not None else None
+            features.append({
+                "id": ev.get("id"), "timestamp": ev.get("timestamp") or p.get("timestamp"),
+                "freq_hz": p.get("freq_hz"), "bearing_deg": bearing, "confidence": p.get("confidence"),
+                "rssi_db": p.get("rssi_db"), "est_lat": est.lat if est else None, "est_lon": est.lon if est else None,
+                "est_range_m": est.range_m if est else None, "est_method": est.method if est else None,
+            })
         return {"site": site, "features": features}
 
     @app.get("/fleet")
     async def fleet_list() -> list[dict[str, Any]]:
-        if not get_fleet:
-            return []
-        return [n.model_dump(mode="json") for n in get_fleet().list_nodes()]
+        return [n.model_dump(mode="json") for n in get_fleet().list_nodes()] if get_fleet else []
 
     @app.post("/fleet/heartbeat")
     async def fleet_heartbeat(body: dict[str, Any]) -> dict[str, Any]:
@@ -179,13 +141,9 @@ def create_app(
         if not node_id:
             return JSONResponse({"error": "node_id required"}, status_code=400)
         node = get_fleet().heartbeat(
-            node_id=str(node_id),
-            status=body.get("status", "online"),
-            capabilities=body.get("capabilities"),
-            current_freq_hz=body.get("current_freq_hz"),
-            last_task_id=body.get("last_task_id"),
-            site=body.get("site"),
-            notes=body.get("notes"),
+            node_id=str(node_id), status=body.get("status", "online"),
+            capabilities=body.get("capabilities"), current_freq_hz=body.get("current_freq_hz"),
+            last_task_id=body.get("last_task_id"), site=body.get("site"), notes=body.get("notes"),
         )
         return node.model_dump(mode="json")
 
@@ -195,5 +153,18 @@ def create_app(
             return {"node": None}
         n = get_fleet().pick_idle()
         return {"node": n.model_dump(mode="json") if n else None}
+
+    @app.post("/ugs/event")
+    async def ugs_event(body: dict[str, Any]) -> dict[str, Any]:
+        if not ingest_ugs:
+            return JSONResponse({"error": "ugs ingest disabled"}, status_code=503)
+        return await ingest_ugs(body)
+
+    @app.get("/rff/gallery")
+    async def rff_gallery() -> dict[str, Any]:
+        if not get_gallery:
+            return {"emitters": []}
+        gal = get_gallery()
+        return {"emitters": [] if gal is None else gal.list_emitters()}
 
     return app

@@ -10,6 +10,7 @@ from typing import Callable, Awaitable
 from krakenbase.client.kraken import KrakenClient
 from krakenbase.config import Settings
 from krakenbase.core.baseline import BaselineEngine
+from krakenbase.core.heading import HeadingFusion
 from krakenbase.models import (
     AlertEvent,
     AnomalyEvent,
@@ -42,6 +43,11 @@ class StateMachine:
         self.alert_fn = alert_fn
         self.handoff_fn = handoff_fn
         self.classifier = classifier
+        self.heading = HeadingFusion(
+            heading_offset_deg=settings.array.heading_offset_deg,
+            nmea_path=getattr(settings.array, "nmea_path", None),
+            stale_after_s=getattr(settings.array, "heading_stale_s", 30.0),
+        )
 
         self.state = SystemState.INIT
         self._running = False
@@ -148,7 +154,9 @@ class StateMachine:
             await self.transition(SystemState.SCANNING, "no usable DOA")
             return
         best = max(self._dwell_readings, key=lambda r: r.confidence)
-        abs_bearing = (best.bearing_deg + self.settings.array.heading_offset_deg) % 360.0
+        if best.heading_deg is not None:
+            self.heading.update_from_doa(compass_heading=best.heading_deg)
+        abs_bearing = self.heading.absolute_bearing(best.bearing_deg)
         doa_event = DoaEvent(
             timestamp=utcnow(),
             freq_hz=best.freq_hz,

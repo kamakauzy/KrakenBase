@@ -54,6 +54,7 @@ class StateMachine:
         self._current_anomaly: AnomalyEvent | None = None
         self._dwell_readings: list[DoaReading] = []
         self._dwell_start: float | None = None
+        self._recover_fails: int = 0
 
     async def transition(self, new_state: SystemState, reason: str = "") -> None:
         old = self.state
@@ -129,15 +130,19 @@ class StateMachine:
             await self.transition(SystemState.SCANNING, "task failed")
             self._current_anomaly = None
             return
+        if not await self._confirm_tune(freq):
+            logger.warning("Tune not confirmed on %s Hz, returning to scan", freq)
+            await self.transition(SystemState.SCANNING, "tune not confirmed")
+            self._current_anomaly = None
+            return
         self._dwell_readings = []
         self._dwell_start = time.time()
-        await asyncio.sleep(self.settings.dwell.settle_s)
         await self.transition(SystemState.DWELLING, f"dwelling on {freq}")
 
     async def _dwell_tick(self) -> None:
         assert self._dwell_start is not None
         elapsed = time.time() - self._dwell_start
-        max_dwell = self.settings.dwell.default_s
+        max_dwell = min(self.settings.dwell.default_s, self.settings.dwell.max_s)
         readings = await self.kraken.fetch_doa()
         for r in readings:
             if r.confidence >= self.settings.kraken.min_confidence:
@@ -218,9 +223,26 @@ class StateMachine:
         self._dwell_start = None
         await self.transition(SystemState.SCANNING, "dwell complete – back to scan")
 
+    async def _confirm_tune(self, freq_hz: int) -> bool:
+        deadline = time.time() + max(0.2, self.settings.kraken.tune_verify_s)
+        tol = max(1, self.settings.kraken.tune_tolerance_hz)
+        await asyncio.sleep(self.settings.dwell.settle_s)
+        while time.time() < deadline:
+            readings = await self.kraken.fetch_doa()
+            if any(abs(r.freq_hz - freq_hz) <= tol for r in readings):
+                return True
+            await asyncio.sleep(self.settings.kraken.poll_interval_s)
+        return False
+
     async def _recover_tick(self) -> None:
         readings = await self.kraken.fetch_doa()
         if readings:
+            self._recover_fails = 0
             await self.transition(SystemState.SCANNING, "Kraken recovered")
-        else:
-            await asyncio.sleep(3.0)
+            return
+        self._recover_fails += 1
+        limit = max(1, self.settings.kraken.recover_fail_limit)
+        if self.state != SystemState.FAULT and self._recover_fails >= limit:
+            await self.transition(SystemState.FAULT, f"Kraken silent {self._recover_fails} recoveries")
+            return
+        await asyncio.sleep(3.0 if self.state != SystemState.FAULT else 10.0)

@@ -39,6 +39,9 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
         "SYNTHETIC" if use_synth else "LIVE",
     )
 
+    if settings.roe.allow_tx:
+        raise SystemExit("ROE v1 forbids roe.allow_tx=true – refuse to start")
+
     Path(settings.system.data_dir).mkdir(parents=True, exist_ok=True)
 
     store = EventStore(settings.system.audit_db)
@@ -90,6 +93,7 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
         get_fleet=lambda: fleet,
         get_baseline=lambda: baseline,
         get_classifier=lambda: classifier,
+        get_settings=lambda: settings,
         roe_version=settings.roe.version,
     )
 

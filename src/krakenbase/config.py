@@ -33,8 +33,6 @@ class ArraySettings(BaseModel):
 
 
 class SiteSettings(BaseModel):
-    """Optional site origin for single-LOB projection (not a cross-fix)."""
-
     lat: float | None = None
     lon: float | None = None
     default_range_m: float = 500.0
@@ -98,6 +96,18 @@ class RffSettings(BaseModel):
     enabled: bool = False
     sensor_id: str = "none"
     recipe_id: str = "none"
+    gallery_path: str | None = None
+    burst_dir: str | None = None
+    wait_s: float = 0.15
+    raise_on_new: bool = True
+
+
+class UgsSettings(BaseModel):
+    enabled: bool = False
+    watch_dir: str | None = None
+    cue_dwell: bool = False
+    atak_dir: str | None = None
+    rr_path: str | None = None
 
 
 class MqttSettings(BaseModel):
@@ -146,7 +156,7 @@ class Settings(BaseSettings):
     roe: RoeSettings = Field(default_factory=RoeSettings)
     site: SiteSettings = Field(default_factory=SiteSettings)
     rff: RffSettings = Field(default_factory=RffSettings)
-
+    ugs: UgsSettings = Field(default_factory=UgsSettings)
     model_config = {"env_prefix": "KB_", "env_nested_delimiter": "__"}
 
 

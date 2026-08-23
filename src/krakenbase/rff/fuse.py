@@ -28,29 +28,20 @@ def fuse(
     gallery_path: str | Path | None = None,
     sensor_id: str = "none",
     recipe_id: str = "none",
+    min_snr_db: float | None = None,
 ) -> RffResult:
     if burst_meta is None or (gallery is None and gallery_path is None):
         if doa is None:
-            return RffResult(
-                freq_hz=0,
-                sensor_id=sensor_id,
-                recipe_id=recipe_id,
-                disposition=RffDisposition.NO_MODEL,
-                notes="no burst / no gallery",
-            )
+            return RffResult(freq_hz=0, sensor_id=sensor_id, recipe_id=recipe_id,
+                             disposition=RffDisposition.NO_MODEL, notes="no burst / no gallery")
         return fuse_stub(doa, sensor_id, recipe_id)
     gal = gallery or Gallery(gallery_path)
     owned = gallery is None
     try:
         src = doa.event_id if doa else None
         freq = doa.freq_hz if doa else None
-        return gal.ingest_sigmf(
-            burst_meta,
-            sensor_id=sensor_id,
-            recipe_id=recipe_id,
-            source_event_id=src,
-            freq_hz=freq,
-        )
+        return gal.ingest_sigmf(burst_meta, sensor_id=sensor_id, recipe_id=recipe_id,
+                                source_event_id=src, freq_hz=freq, min_snr_db=min_snr_db)
     finally:
         if owned:
             gal.close()

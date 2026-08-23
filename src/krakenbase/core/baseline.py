@@ -42,7 +42,7 @@ class BaselineEngine:
         self.settings = settings
         self._bins: dict[int, BinStats] = defaultdict(BinStats)
         self._active: dict[int, float] = {}
-        self._fired: set[int] = set()
+        self._fired: dict[int, float] = {}
         self._band_hits: dict[str, int] = defaultdict(int)
         self._history: list[dict] = []
         self._history_max = 120
@@ -85,8 +85,12 @@ class BaselineEngine:
             if quantised not in self._active:
                 self._active[quantised] = now
             duration = now - self._active[quantised]
-            if duration >= self.settings.min_anomaly_duration_s and quantised not in self._fired:
-                self._fired.add(quantised)
+            last_fire = self._fired.get(quantised)
+            rearm_s = max(0.0, float(getattr(self.settings, "rearm_s", 300.0)))
+            if last_fire is not None and (now - last_fire) < rearm_s:
+                return None
+            if duration >= self.settings.min_anomaly_duration_s:
+                self._fired[quantised] = now
                 if band:
                     self._band_hits[band.name] += 1
                 event = AnomalyEvent(
@@ -111,7 +115,7 @@ class BaselineEngine:
             return None
 
         self._active.pop(quantised, None)
-        self._fired.discard(quantised)
+        self._fired.pop(quantised, None)
         stats.update(power_db)
         self._maybe_record_frame()
         return None

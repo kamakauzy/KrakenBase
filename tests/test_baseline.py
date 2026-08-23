@@ -55,6 +55,19 @@ def test_anomaly_clears_and_can_refire():
     assert eng.observe(462_712_500, -30.0) is not None
 
 
+def test_rearm_while_hot():
+    eng = BaselineEngine(
+        BaselineSettings(anomaly_margin_db=10.0, min_anomaly_duration_s=0.1, rearm_s=0.2)
+    )
+    _warm(eng)
+    assert eng.observe(462_712_500, -30.0) is None
+    time.sleep(0.15)
+    assert eng.observe(462_712_500, -30.0) is not None
+    assert eng.observe(462_712_500, -30.0) is None
+    time.sleep(0.25)
+    assert eng.observe(462_712_500, -30.0) is not None
+
+
 def test_disabled_baseline():
     eng = BaselineEngine(BaselineSettings(enabled=False))
     assert eng.observe(100_000_000, 0.0) is None

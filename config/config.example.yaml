@@ -9,25 +9,22 @@ system:
   audit_db: "/var/lib/krakenbase/events.db"
 
 kraken:
-  # Localhost when running on the same laptop
   host: "127.0.0.1"
   doa_port: 8081
-  settings_port: 8081          # or 8042 for middleware
+  settings_port: 8081
   poll_interval_s: 0.5
-  min_confidence: 70.0         # only alert / hand-off above this
+  min_confidence: 70.0
   request_timeout_s: 2.0
-  # How we task the array
-  control_method: "settings_json"   # settings_json | middleware
+  control_method: "settings_json"
 
 array:
-  type: "UCA"                  # UCA | ULA | Custom
-  radius_m: 0.15               # critical for accuracy – measure it
-  heading_offset_deg: 0.0      # physical orientation of element 0 relative to true north
+  type: "UCA"
+  radius_m: 0.15
+  heading_offset_deg: 0.0
   element_order: [0, 1, 2, 3, 4]
 
 baseline:
   enabled: true
-  # Example tactical bands – adjust to your authorization
   bands:
     - name: "VHF"
       start_hz: 136000000
@@ -45,28 +42,26 @@ baseline:
   anomaly_margin_db: 10.0
   min_anomaly_duration_s: 2.0
   rearm_s: 300.0
-  # Source of power measurements: "kraken" | "rtl_power" | "synthetic"
   power_source: "kraken"
 
 dwell:
   default_s: 2.5
   max_s: 5.0
-  settle_s: 1.0                # wait after retune before collecting DOA
-  max_readings: 5              # collect up to N readings and pick best
+  settle_s: 1.0
+  max_readings: 5
 
 alert:
   meshtastic:
     enabled: true
-    # device path or TCP – adjust to your radio
     interface: "/dev/ttyUSB0"
     channel_index: 0
-    rate_limit_s: 60           # minimum seconds between alerts for same freq
+    rate_limit_s: 60
   local:
-    enabled: true              # always log locally
+    enabled: true
 
 handoff:
   enabled: true
-  transport: "file"            # file | mqtt (mqtt needs paho-mqtt; falls back to file)
+  transport: "file"
   mqtt:
     host: "127.0.0.1"
     port: 1883
@@ -75,14 +70,18 @@ handoff:
     priority: 5
     max_dwell_min: 30
     record_iq: false
+    # target_node_id: "ugs-west-gate"
+
+rff:
+  enabled: false
+  sensor_id: "none"
+  recipe_id: "none"
 
 status_api:
   host: "127.0.0.1"
   port: 8090
-  # Bind only to localhost by default
-  # token: "change-me"         # required on POST if set (X-API-Token / Bearer)
 
 roe:
   version: "0.1"
   require_audit: true
-  allow_tx: false              # process exits if true
+  allow_tx: false

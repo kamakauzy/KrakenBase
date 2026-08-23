@@ -18,6 +18,9 @@ class KrakenSettings(BaseModel):
     min_confidence: float = 70.0
     request_timeout_s: float = 2.0
     control_method: str = "settings_json"
+    tune_verify_s: float = 2.0
+    tune_tolerance_hz: int = 50000
+    recover_fail_limit: int = 5
 
 
 class ArraySettings(BaseModel):
@@ -56,6 +59,7 @@ class BaselineSettings(BaseModel):
     update_interval_s: float = 30.0
     anomaly_margin_db: float = 10.0
     min_anomaly_duration_s: float = 2.0
+    rearm_s: float = 300.0
     power_source: str = "kraken"
 
 
@@ -97,7 +101,7 @@ class MqttSettings(BaseModel):
 
 class HandOffSettings(BaseModel):
     enabled: bool = True
-    transport: str = "mqtt"
+    transport: str = "file"
     mqtt: MqttSettings = Field(default_factory=MqttSettings)
     defaults: HandOffDefaults = Field(default_factory=HandOffDefaults)
 
@@ -105,6 +109,7 @@ class HandOffSettings(BaseModel):
 class StatusApiSettings(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8090
+    token: str | None = None
 
 
 class RoeSettings(BaseModel):

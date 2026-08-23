@@ -41,6 +41,10 @@ class HandOffPublisher:
             source_event_id=doa.event_id,
             target_node_id=self.settings.defaults.target_node_id,
         )
+        rff = getattr(doa, "rff", None)
+        if rff is not None and rff.disposition.value == "NEW":
+            task.record_iq = True
+            task.priority = max(1, task.priority - 2)
 
         if not self.settings.enabled:
             logger.debug("Hand-off disabled – task not published")
@@ -49,6 +53,10 @@ class HandOffPublisher:
         payload = task.model_dump(mode="json")
         payload["bearing_deg"] = doa.bearing_deg
         payload["confidence"] = doa.confidence
+        if rff is not None:
+            payload["rff_disposition"] = rff.disposition.value
+            payload["emitter_uid"] = rff.emitter_uid
+            payload["rff_score"] = rff.score
 
         if self.settings.transport == "mqtt":
             try:
@@ -58,24 +66,18 @@ class HandOffPublisher:
                     hostname=self.settings.mqtt.host,
                     port=self.settings.mqtt.port,
                 )
-                logger.info(
-                    "Hand-off MQTT %s → %.4f MHz",
-                    self.settings.mqtt.topic,
-                    task.freq_hz / 1e6,
-                )
+                logger.info("Hand-off MQTT %s → %.4f MHz", self.settings.mqtt.topic, task.freq_hz / 1e6)
             except Exception as exc:
                 logger.error("MQTT hand-off failed: %s – falling back to file", exc)
                 self._write_file(task, payload)
         else:
             self._write_file(task, payload)
-
         return task
 
     def _write_file(self, task: HandOffTask, payload: dict) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         path = self.out_dir / f"{task.task_id}.json"
         path.write_text(json.dumps(payload, indent=2, default=str))
-        feed = self.out_dir / "tasks.jsonl"
-        with feed.open("a") as f:
+        with (self.out_dir / "tasks.jsonl").open("a") as f:
             f.write(json.dumps(payload, default=str) + "\n")
         logger.info("Hand-off file %s  %.4f MHz", path.name, task.freq_hz / 1e6)

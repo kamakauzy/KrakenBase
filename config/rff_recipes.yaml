@@ -1,0 +1,27 @@
+# Named capture recipes. Do not mix sensor_class in one gallery.
+recipes:
+  - recipe_id: synthetic:48k:0
+    sensor_class: synthetic
+    sample_rate: 48000
+    gain_db: 0
+    duration_ms: 20
+    datatype: cf32_le
+  - recipe_id: rtl_v4:2.4e6:30
+    sensor_class: rtl_v4
+    sample_rate: 2400000
+    gain_db: 30
+    duration_ms: 40
+    datatype: cu8
+  - recipe_id: rtl_v3:2.4e6:30
+    sensor_class: rtl_v3
+    sample_rate: 2400000
+    gain_db: 30
+    duration_ms: 40
+    datatype: cu8
+  - recipe_id: rsp1b:2e6:20
+    sensor_class: rsp1b
+    sample_rate: 2000000
+    gain_db: 20
+    duration_ms: 40
+    datatype: cf32_le
+    notes: SoapySDR not wired in R1. Recipe reserved.

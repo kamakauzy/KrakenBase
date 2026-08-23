@@ -46,13 +46,13 @@
 - [x] Live GPS heading fusion (DOA heading + optional NMEA)
 - [x] RF fingerprint / SEI integration **design** — [docs/RFF_INTEGRATION.md](RFF_INTEGRATION.md)
   - [x] R0 contracts + fuse stub (`NO_MODEL`)
-  - [ ] R1 RSP1B/RTL burst capture + SigMF (no ML required)
+  - [x] R1 RSP1B/RTL burst capture + SigMF (no ML required)
   - [ ] R2 offline ONNX embed + gallery
   - [ ] R3 live async fuse into alerts / hand-off / RR export
   - [ ] R4 SNR/recipe gates + operator label API
 - [x] Remote RF UGS sidecar **design** — [docs/REMOTE_RF_UGS.md](REMOTE_RF_UGS.md)
   - [x] U0 contracts (`UgsEvent`, `target_node_id`)
-  - [ ] U1 bench node + synthetic trigger + local burst
+  - [x] U1 bench node + synthetic trigger + local burst
   - [ ] U2 camera-pole / ONVIF + fleet heartbeat
   - [ ] U3 primary hand-off ↔ UGS event loop + ATAK/RR
   - [ ] U4 optional ONNX embed on RSP1B poles only

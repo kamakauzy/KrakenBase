@@ -103,16 +103,14 @@ class StateMachine:
         for r in readings:
             anomaly = self.baseline.observe(r.freq_hz, r.rssi_db)
             if anomaly is not None:
+                extra = None
                 if self.classifier is not None:
                     try:
                         clf = self.classifier.classify_anomaly(anomaly)
-                        payload = anomaly.model_dump(mode="json")
-                        payload["classification"] = clf.model_dump(mode="json")
-                        await self.store._insert(anomaly.event_id, "anomaly", payload)
+                        extra = {"classification": clf.model_dump(mode="json")}
                     except Exception:
-                        await self.store.log_anomaly(anomaly)
-                else:
-                    await self.store.log_anomaly(anomaly)
+                        extra = None
+                await self.store.log_anomaly(anomaly, extra=extra)
                 self._current_anomaly = anomaly
                 await self.transition(SystemState.TASKING, f"anomaly at {anomaly.freq_hz}")
                 return
@@ -173,6 +171,18 @@ class StateMachine:
             dwell_s=time.time() - (self._dwell_start or time.time()),
             reading=best,
         )
+        if getattr(self.settings, "rff", None) and self.settings.rff.enabled:
+            try:
+                from krakenbase.rff.fuse import fuse_stub
+
+                doa_event.rff = fuse_stub(
+                    doa_event,
+                    sensor_id=self.settings.rff.sensor_id,
+                    recipe_id=self.settings.rff.recipe_id,
+                )
+                await self.store.log_rff(doa_event.rff)
+            except Exception as exc:
+                logger.warning("RFF stub failed: %s", exc)
         await self.store.log_doa(doa_event)
         self._last_doa_event = doa_event
         await self.transition(SystemState.ALERTING, f"bearing {best.bearing_deg:.0f}\u00b0 conf {best.confidence:.0f}")

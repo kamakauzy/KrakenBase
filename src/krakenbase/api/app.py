@@ -5,14 +5,25 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from krakenbase import __version__
+from krakenbase.core.geolocate import project_emitter
 from krakenbase.models import HealthStatus, SystemState
 
 STATIC_DIR = Path(__file__).resolve().parent.parent.parent.parent / "web"
+
+
+def _token_ok(expected: str | None, header_token: str | None, authorization: str | None) -> bool:
+    if not expected:
+        return True
+    if header_token and header_token == expected:
+        return True
+    if authorization and authorization.startswith("Bearer ") and authorization[7:] == expected:
+        return True
+    return False
 
 
 def create_app(
@@ -22,12 +33,30 @@ def create_app(
     get_fleet=None,
     get_baseline=None,
     get_classifier=None,
+    get_settings=None,
     roe_version: str = "0.1",
 ) -> FastAPI:
     app = FastAPI(title="KrakenBase", version=__version__)
 
-    if STATIC_DIR.exists():
-        app.mount("/static", StaticFiles(directory=str(STATIC_DIR / "static")), name="static")
+    static_dir = STATIC_DIR / "static"
+    if static_dir.is_dir():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    def _api_token() -> str | None:
+        if not get_settings:
+            return None
+        return get_settings().status_api.token
+
+    @app.middleware("http")
+    async def write_guard(request: Request, call_next):
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            expected = _api_token()
+            if expected:
+                hdr = request.headers.get("x-api-token")
+                auth = request.headers.get("authorization")
+                if not _token_ok(expected, hdr, auth):
+                    return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return await call_next(request)
 
     @app.get("/", response_class=HTMLResponse)
     async def ui_root() -> HTMLResponse:
@@ -59,10 +88,12 @@ def create_app(
     @app.get("/state")
     async def state() -> dict[str, Any]:
         sm = get_state_machine()
+        heading = getattr(sm, "heading", None)
         return {
             "state": sm.state.value,
             "has_anomaly": sm._current_anomaly is not None,
             "dwell_readings": len(getattr(sm, "_dwell_readings", [])),
+            "heading": heading.snapshot() if heading is not None else None,
         }
 
     @app.get("/events")
@@ -87,7 +118,52 @@ def create_app(
                     "ready": stats.ready,
                 }
             )
-        return {"bins": bins, "count": len(bins)}
+        return {"bins": bins, "count": len(bins), "bands": eng.band_summary()}
+
+    @app.get("/waterfall")
+    async def waterfall(max_frames: int = 60) -> dict[str, Any]:
+        if not get_baseline:
+            return {"frames": []}
+        frames = get_baseline().waterfall_history(max_frames=max_frames)
+        return {"frames": frames, "count": len(frames)}
+
+    @app.get("/map/features")
+    async def map_features(limit: int = 50) -> dict[str, Any]:
+        settings = get_settings() if get_settings else None
+        site = {
+            "site_id": settings.system.site_id if settings else None,
+            "lat": settings.site.lat if settings else None,
+            "lon": settings.site.lon if settings else None,
+            "default_range_m": settings.site.default_range_m if settings else 500.0,
+        }
+        store = get_store()
+        events = await store.recent(limit=limit, event_type="doa")
+        features = []
+        for ev in events:
+            p = ev.get("payload") or {}
+            bearing = p.get("absolute_bearing_deg", p.get("bearing_deg"))
+            est = None
+            if settings is not None and bearing is not None:
+                est = project_emitter(
+                    float(bearing),
+                    settings.site,
+                    rssi_db=p.get("rssi_db"),
+                )
+            features.append(
+                {
+                    "id": ev.get("id"),
+                    "timestamp": ev.get("timestamp") or p.get("timestamp"),
+                    "freq_hz": p.get("freq_hz"),
+                    "bearing_deg": bearing,
+                    "confidence": p.get("confidence"),
+                    "rssi_db": p.get("rssi_db"),
+                    "est_lat": est.lat if est else None,
+                    "est_lon": est.lon if est else None,
+                    "est_range_m": est.range_m if est else None,
+                    "est_method": est.method if est else None,
+                }
+            )
+        return {"site": site, "features": features}
 
     @app.get("/fleet")
     async def fleet_list() -> list[dict[str, Any]]:

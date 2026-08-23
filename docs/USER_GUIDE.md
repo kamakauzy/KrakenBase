@@ -59,7 +59,9 @@ python -m krakenbase.main -c config.yaml
 | `kraken.min_confidence` | Below this → log only, no alert/hand-off. |
 | `baseline.anomaly_margin_db` | How far above baseline counts as interesting. |
 | `baseline.min_anomaly_duration_s` | Sustained time before we DF. |
-| `dwell.default_s` / `settle_s` | How long to park the array. Keep short. |
+| `baseline.rearm_s` | Same bin will not re-alert until quiet or this cooldown. |
+| `dwell.default_s` / `max_s` / `settle_s` | How long to park the array. Keep short. |
+| `status_api.token` | Required on POSTs if set. Leave empty only on localhost. |
 | `alert.meshtastic.*` | Radio path + rate limit. |
 | `handoff.enabled` | Secondary monitor tasking. |
 
@@ -72,6 +74,8 @@ curl -s http://127.0.0.1:8090/health | jq
 curl -s http://127.0.0.1:8090/state | jq
 curl -s 'http://127.0.0.1:8090/events?limit=20' | jq
 curl -s 'http://127.0.0.1:8090/events?type=doa&limit=10' | jq
+curl -s http://127.0.0.1:8090/waterfall | jq
+curl -s 'http://127.0.0.1:8090/map/features?limit=20' | jq
 ```
 
 `/health` → `ok` | `degraded` | `fault`  
@@ -84,7 +88,7 @@ INIT → SCANNING → (anomaly) → TASKING → DWELLING → PROCESSING
      → ALERTING → HANDING_OFF → SCANNING
 ```
 
-If Kraken goes silent > ~10s → `DEGRADED`, then recovers automatically when DOA returns.
+If Kraken goes silent > ~10s → `DEGRADED`. Repeated failed recoveries → `FAULT`. Recovers when DOA returns.
 
 ## Array setup (live)
 
@@ -99,13 +103,13 @@ If Kraken goes silent > ~10s → `DEGRADED`, then recovers automatically when DO
 - Set `alert.meshtastic.interface` to your serial device (or TCP).  
 - Rate limit defaults to 60s per frequency — do not turn this off in the field.  
 - Alert format: `KB|<MHz>|<bearing>°|<conf>|<id>`  
-- If the radio is missing, alerts fall back to local log and still get audited.
+- If the radio is missing, alerts fall back to local log (`channel=local`) and still get audited.
 
 ## Secondary hand-off
 
 When `handoff.enabled: true`, each high-confidence DOA can publish a task.
 
-**File transport (simplest):**
+**File transport (default):**
 
 ```yaml
 handoff:
@@ -128,16 +132,17 @@ The stub logs the task and, if `rtl_sdr` / `rtl_fm` is present, can lock and rec
 
 | Symptom | Check |
 |---------|--------|
-| Stuck in DEGRADED | Is krakensdr_doa up? `curl localhost:8081/DOA_value.html` |
+| Stuck in DEGRADED / FAULT | Is krakensdr_doa up? `curl localhost:8081/DOA_value.html` |
 | No anomalies ever | Baseline still warming, or margin too high, or bands wrong |
 | Alerts spam | Raise `rate_limit_s`; confirm confidence gate |
 | Bad bearings | `heading_offset_deg`, array radius, Kraken calibration |
 | Port 8090 in use | Change `status_api.port` in config |
 | Permission on data_dir | Point `system.data_dir` somewhere writable |
+| Tune not confirmed | Tasking POST did not move the VFO; check Kraken control path |
 
 ## ROE (short)
 
-- No transmit paths.  
+- No transmit paths. `allow_tx=true` will not start.  
 - Audit DF, alerts, and hand-offs.  
 - Confidence gate before action.  
 - Always return to scan after dwell.  
@@ -154,9 +159,9 @@ pytest -v
 
 ## What is not in v0.1
 
-- Live waterfall UI  
+- RF fingerprint / remote UGS (design docs only)  
 - Multi-Kraken networks  
-- Automatic “known good” emitter database  
+- Learned emitter models  
 - Any TX / EA capability  
 
 Those stay out of scope until you explicitly expand ROE and design.

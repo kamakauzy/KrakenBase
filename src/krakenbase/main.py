@@ -16,14 +16,9 @@ from krakenbase.client.kraken import KrakenClient
 from krakenbase.client.synthetic import SyntheticKrakenClient
 from krakenbase.config import load_config
 from krakenbase.core.baseline import BaselineEngine
-from krakenbase.core.classifier import EmitterClassifier
 from krakenbase.core.state_machine import StateMachine
-from krakenbase.fleet.registry import FleetRegistry
 from krakenbase.handoff.publisher import HandOffPublisher
-from krakenbase.models import UgsEvent
-from krakenbase.rff.gallery import Gallery
 from krakenbase.store.events import EventStore
-from krakenbase.ugs.bridge import export_ugs, scan_ugs_dir, should_cue
 
 logger = logging.getLogger("krakenbase")
 
@@ -52,12 +47,6 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
     baseline = BaselineEngine(settings.baseline)
     alerter = MeshtasticAlerter(settings.alert.meshtastic, site_id=settings.system.site_id)
     publisher = HandOffPublisher(settings.handoff, settings.system.data_dir)
-    fleet = FleetRegistry(db_path=Path(settings.system.data_dir) / "fleet.db")
-    known = Path(settings.system.data_dir) / "known_emitters.yaml"
-    if not known.exists():
-        known = Path("config/known_emitters.example.yaml")
-    classifier = EmitterClassifier(settings.baseline, known_path=known if known.exists() else None)
-    gallery = Gallery(settings.rff.gallery_path) if settings.rff.enabled and settings.rff.gallery_path else None
 
     async def alert_fn(doa):
         return await alerter.send(doa)
@@ -65,24 +54,10 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
     async def handoff_fn(doa):
         return await publisher.publish(doa)
 
-    sm = StateMachine(settings, kraken, store, baseline, alert_fn, handoff_fn if settings.handoff.enabled else None, classifier, gallery)
-    ugs_seen: set[str] = set()
-
-    async def ingest_ugs_body(body: dict):
-        ev = UgsEvent.model_validate(body)
-        await store.log_ugs(ev)
-        if settings.ugs.enabled:
-            export_ugs(ev, site_id=settings.system.site_id, lat=settings.site.lat, lon=settings.site.lon,
-                       atak_dir=settings.ugs.atak_dir, rr_path=settings.ugs.rr_path)
-            if ev.freq_hz and should_cue(ev, settings.baseline.bands, settings.ugs.cue_dwell):
-                sm.cue_freq(ev.freq_hz)
-        return ev.model_dump(mode="json")
-
+    sm = StateMachine(settings, kraken, store, baseline, alert_fn, handoff_fn if settings.handoff.enabled else None)
     app = create_app(
         get_state_machine=lambda: sm, get_store=lambda: store, get_kraken=lambda: kraken,
-        get_fleet=lambda: fleet, get_baseline=lambda: baseline, get_classifier=lambda: classifier,
-        get_settings=lambda: settings, get_gallery=lambda: gallery, ingest_ugs=ingest_ugs_body,
-        roe_version=settings.roe.version,
+        get_baseline=lambda: baseline, get_settings=lambda: settings, roe_version=settings.roe.version,
     )
     server = uvicorn.Server(uvicorn.Config(app, host=settings.status_api.host, port=settings.status_api.port, log_level="warning"))
     loop = asyncio.get_running_loop()
@@ -110,34 +85,19 @@ async def amain(config_path: str | None, synthetic: bool = False) -> None:
             except asyncio.TimeoutError:
                 pass
 
-    async def ugs_loop():
-        while not stop_event.is_set():
-            try:
-                if settings.ugs.enabled and settings.ugs.watch_dir:
-                    for ev in scan_ugs_dir(settings.ugs.watch_dir, ugs_seen):
-                        await ingest_ugs_body(ev.model_dump(mode="json"))
-            except Exception as exc:
-                logger.warning("UGS ingest failed: %s", exc)
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
-                pass
-
     retention_task = asyncio.create_task(retention_loop())
-    ugs_task = asyncio.create_task(ugs_loop())
     await stop_event.wait()
     sm.stop()
     server.should_exit = True
     retention_task.cancel()
-    ugs_task.cancel()
-    await asyncio.gather(sm_task, api_task, retention_task, ugs_task, return_exceptions=True)
+    await asyncio.gather(sm_task, api_task, retention_task, return_exceptions=True)
     await kraken.close()
     await store.close()
     logger.info("KrakenBase stopped")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="KrakenBase fixed-site SIGINT node")
+    parser = argparse.ArgumentParser(description="KrakenBase patrol-base DF node")
     parser.add_argument("-c", "--config", default=None)
     parser.add_argument("--synthetic", action="store_true")
     args = parser.parse_args()

@@ -11,9 +11,7 @@ from krakenbase.client.kraken import KrakenClient
 from krakenbase.config import Settings
 from krakenbase.core.baseline import BaselineEngine
 from krakenbase.core.heading import HeadingFusion
-from krakenbase.models import (
-    AlertEvent, AnomalyEvent, DoaEvent, DoaReading, HandOffTask, RffResult, SystemState, utcnow,
-)
+from krakenbase.models import AlertEvent, AnomalyEvent, DoaEvent, DoaReading, HandOffTask, SystemState, utcnow
 from krakenbase.store.events import EventStore
 
 logger = logging.getLogger(__name__)
@@ -22,18 +20,13 @@ logger = logging.getLogger(__name__)
 class StateMachine:
     def __init__(self, settings: Settings, kraken: KrakenClient, store: EventStore, baseline: BaselineEngine,
                  alert_fn: Callable[[DoaEvent], Awaitable[AlertEvent]] | None = None,
-                 handoff_fn: Callable[[DoaEvent], Awaitable[HandOffTask]] | None = None,
-                 classifier=None, gallery=None):
+                 handoff_fn: Callable[[DoaEvent], Awaitable[HandOffTask]] | None = None):
         self.settings = settings
         self.kraken = kraken
         self.store = store
         self.baseline = baseline
         self.alert_fn = alert_fn
         self.handoff_fn = handoff_fn
-        self.classifier = classifier
-        self.gallery = gallery
-        self._rff_task = None
-        self._cue_freqs: list[int] = []
         self.heading = HeadingFusion(
             heading_offset_deg=settings.array.heading_offset_deg,
             nmea_path=getattr(settings.array, "nmea_path", None),
@@ -81,9 +74,6 @@ class StateMachine:
     def stop(self) -> None:
         self._running = False
 
-    def cue_freq(self, freq_hz: int) -> None:
-        self._cue_freqs.append(int(freq_hz))
-
     async def _scan_tick(self) -> None:
         readings = await self.kraken.fetch_doa()
         if not readings:
@@ -95,23 +85,10 @@ class StateMachine:
         for r in readings:
             anomaly = self.baseline.observe(r.freq_hz, r.rssi_db)
             if anomaly is not None:
-                extra = None
-                if self.classifier is not None:
-                    try:
-                        extra = {"classification": self.classifier.classify_anomaly(anomaly).model_dump(mode="json")}
-                    except Exception:
-                        extra = None
-                await self.store.log_anomaly(anomaly, extra=extra)
+                await self.store.log_anomaly(anomaly)
                 self._current_anomaly = anomaly
                 await self.transition(SystemState.TASKING, f"anomaly at {anomaly.freq_hz}")
                 return
-        if self._cue_freqs:
-            freq = self._cue_freqs.pop(0)
-            anomaly = AnomalyEvent(freq_hz=freq, power_db=-30.0, baseline_db=-50.0, margin_db=20.0, duration_s=2.0, source="ugs_cue")
-            await self.store.log_anomaly(anomaly)
-            self._current_anomaly = anomaly
-            await self.transition(SystemState.TASKING, f"ugs cue {freq}")
-            return
         await asyncio.sleep(self.settings.kraken.poll_interval_s)
 
     async def _task_tick(self) -> None:
@@ -120,12 +97,8 @@ class StateMachine:
             return
         freq = self._current_anomaly.freq_hz
         ok = await self.kraken.task_frequency(freq)
-        if not ok:
-            await self.transition(SystemState.SCANNING, "task failed")
-            self._current_anomaly = None
-            return
-        if not await self._confirm_tune(freq):
-            await self.transition(SystemState.SCANNING, "tune not confirmed")
+        if not ok or not await self._confirm_tune(freq):
+            await self.transition(SystemState.SCANNING, "task/tune failed")
             self._current_anomaly = None
             return
         self._dwell_readings = []
@@ -145,30 +118,6 @@ class StateMachine:
             return
         await asyncio.sleep(self.settings.kraken.poll_interval_s)
 
-    async def _fuse_async(self, doa: DoaEvent) -> RffResult:
-        from krakenbase.rff.live import fuse_doa
-        result = await asyncio.to_thread(
-            fuse_doa, doa, gallery=self.gallery, burst_dir=self.settings.rff.burst_dir,
-            sensor_id=self.settings.rff.sensor_id, recipe_id=self.settings.rff.recipe_id,
-        )
-        doa.rff = result
-        try:
-            await self.store.log_rff(result)
-        except Exception as exc:
-            logger.warning("RFF log failed: %s", exc)
-        return result
-
-    async def _await_rff(self, doa: DoaEvent) -> None:
-        if self._rff_task is None:
-            return
-        timeout = max(0.0, getattr(self.settings.rff, "wait_s", 0.15))
-        try:
-            doa.rff = await asyncio.wait_for(asyncio.shield(self._rff_task), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.debug("RFF still running – not stalling DF")
-        except Exception as exc:
-            logger.warning("RFF wait failed: %s", exc)
-
     async def _process_tick(self) -> None:
         if not self._dwell_readings:
             self._current_anomaly = None
@@ -184,8 +133,6 @@ class StateMachine:
             related_anomaly_id=self._current_anomaly.event_id if self._current_anomaly else None,
             dwell_s=time.time() - (self._dwell_start or time.time()), reading=best,
         )
-        if getattr(self.settings, "rff", None) and self.settings.rff.enabled:
-            self._rff_task = asyncio.create_task(self._fuse_async(doa_event))
         await self.store.log_doa(doa_event)
         self._last_doa_event = doa_event
         await self.transition(SystemState.ALERTING, f"bearing {best.bearing_deg:.0f} deg conf {best.confidence:.0f}")
@@ -195,7 +142,6 @@ class StateMachine:
         if doa_event is None:
             await self.transition(SystemState.SCANNING, "missing doa event")
             return
-        await self._await_rff(doa_event)
         if self.alert_fn:
             try:
                 await self.store.log_alert(await self.alert_fn(doa_event))
@@ -209,8 +155,6 @@ class StateMachine:
 
     async def _handoff_tick(self) -> None:
         doa_event: DoaEvent = getattr(self, "_last_doa_event", None)
-        if doa_event:
-            await self._await_rff(doa_event)
         if doa_event and self.handoff_fn:
             try:
                 await self.store.log_handoff(await self.handoff_fn(doa_event))
@@ -239,8 +183,7 @@ class StateMachine:
             await self.transition(SystemState.SCANNING, "Kraken recovered")
             return
         self._recover_fails += 1
-        limit = max(1, self.settings.kraken.recover_fail_limit)
-        if self.state != SystemState.FAULT and self._recover_fails >= limit:
+        if self.state != SystemState.FAULT and self._recover_fails >= max(1, self.settings.kraken.recover_fail_limit):
             await self.transition(SystemState.FAULT, f"Kraken silent {self._recover_fails} recoveries")
             return
         await asyncio.sleep(3.0 if self.state != SystemState.FAULT else 10.0)
